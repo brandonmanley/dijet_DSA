@@ -162,3 +162,6 @@ cython_debug/
 #.idea/
 bmanley/.DS_Store
 .DS_Store
+
+bmanley/mc_data
+*.png
