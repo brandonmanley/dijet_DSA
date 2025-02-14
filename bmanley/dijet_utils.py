@@ -6,6 +6,7 @@ from scipy.special import jv, kv
 import json
 
 
+
 class DijetXsec:
 	def __init__(self, deta=0.05, tag='_rc'): 
 		# define physical constants
@@ -17,7 +18,7 @@ class DijetXsec:
 		self.Nf = 3.0
 
 		# load unpolarized dipole amplitude
-		unpolar_input_file = '/Users/brandonmanley/Desktop/PhD/dijet_DSA/bmanley/unpolarized_dipole_ymin4.610000_ymax9.210000.dat'
+		unpolar_input_file = '/Users/brandonmanley/Desktop/PhD/dijet_DSA/bmanley/mc_data/unpolarized_dipole_ymin4.610000_ymax9.210000.dat'
 		self.ndipole = pd.read_csv(unpolar_input_file, sep=r'\s+', header=None, names=['y', 'ln(r)', 'N[ln(r)]'])
 
 		# load polarized dipole amplitudes
@@ -26,7 +27,7 @@ class DijetXsec:
 		deta_str = 'd'+str(self.deta)[2:]
 		polar_indir = f'/Users/brandonmanley/Desktop/PhD/moment_evolution/evolved_dipoles/largeNc&Nf/{deta_str}_basis/'
 
-		ic_file = '/Users/brandonmanley/Desktop/PhD/dijet_DSA/bmanley/mc_data/mc_ICs.json'
+		ic_file = '/Users/brandonmanley/Desktop/PhD/dijet_DSA/bmanley/mc_data/mc_ICs_random_fit.json'
 		with open(ic_file, "r") as file:	ics = json.load(file)
 
 		self.pdipoles = pd.DataFrame()
@@ -42,6 +43,10 @@ class DijetXsec:
 			dipole_data = pd.DataFrame(self.to_array(input_dipole), columns = ['s10', 'eta', amp])
 			if iamp == 0: self.pdipoles = dipole_data
 			else:  self.pdipoles[amp] = dipole_data[amp]
+
+
+	def get_dipoles(self):
+		return [self.ndipole, self.pdipoles]
 
 
 	def to_array(self, data):
@@ -110,7 +115,7 @@ class DijetXsec:
 	
 			# Extract and process columns
 			u = dipole['ln(r)'].to_numpy()
-			amp_values = 15*2.57*(dipole['N[ln(r)]'].to_numpy()) # 15*2.57 (GeV^{-2}) is value of \int d^2 b from fit in 2407.10581  
+			amp_values = 14*(3.894*(10**5))*(dipole['N[ln(r)]'].to_numpy()) # 14 (mb) is value of \int d^2 b from fit in 2407.10581  
 			amp_values = np.where(u > np.log(1/lamIR), 0, amp_values)
 			size = 0.01  # from evolution code
 	
@@ -122,6 +127,12 @@ class DijetXsec:
 		# Perform the sum
 		total_sum = size*np.sum(exp_term*jv_term*kv_term*amp_values)
 		return prefactor*total_sum
+
+
+	def get_g1(self, kvar):
+
+		pass
+
 
 
 	def get_coeff(self, flavor, kvar):
@@ -303,6 +314,7 @@ class DijetXsec:
 			print('requested coefficient', flavor, 'does not exist')
 
 
+	# returns xsec in units of femptobarns (fb)
 	def get_xsec(self, kvar, kind):
 
 		xsec_prefactor = self.alpha_em/(4*(np.pi**2)*(kvar['Q']**2))
@@ -310,21 +322,17 @@ class DijetXsec:
 		if kind == 'DSA':
 			tt_term = (2-kvar['y'])*(self.get_coeff('A_TT', kvar) + (kvar['delta']/kvar['pT'])*np.cos(kvar['phi_Dp'])*self.get_coeff('B_TT', kvar))
 			lt_term = np.sqrt(2-2*kvar['y'])*(np.cos(kvar['phi_kp'])*self.get_coeff('A_LT', kvar) + (kvar['delta']/kvar['pT'])*np.cos(kvar['phi_Dp'])*np.cos(kvar['phi_kp'])*self.get_coeff('B_LT', kvar) + (kvar['delta']/kvar['pT'])*np.sin(kvar['phi_Dp'])*np.sin(kvar['phi_kp'])*self.get_coeff('C_LT', kvar))
-			return xsec_prefactor*(tt_term + lt_term)
+			xsec = xsec_prefactor*(tt_term + lt_term)
+			xsec /= 2.57*(10**(-12))
+			return xsec
 
 		elif kind == 'unpolarized':
 			tt_term = (1 + (1-kvar['y'])**2)*(self.get_coeff('A_TT_unpolar', kvar) + (kvar['delta']/kvar['pT'])*np.cos(kvar['phi_Dp'])*self.get_coeff('B_TT_unpolar', kvar))
 			tmt_term = -2*(1-kvar['y'])*(np.cos(2*kvar['phi_kp'])*self.get_coeff('A_TmT_unpolar', kvar) + (kvar['delta']/kvar['pT'])*np.cos(kvar['phi_Dp'])*np.cos(2*kvar['phi_kp'])*self.get_coeff('B_TmT_unpolar', kvar) + (kvar['delta']/kvar['pT'])*np.sin(kvar['phi_Dp'])*np.sin(2*kvar['phi_kp'])*self.get_coeff('C_TmT_unpolar', kvar))
 			ll_term = 4*(1-kvar['y'])*(self.get_coeff('A_LL_unpolar', kvar) + (kvar['delta']/kvar['pT'])*np.cos(kvar['phi_Dp'])*self.get_coeff('B_LL_unpolar', kvar))
-			return xsec_prefactor*(tt_term + tmt_term + ll_term)
-
-
-
-
-
-
-
-
+			xsec = xsec_prefactor*(tt_term + tmt_term + ll_term)
+			xsec /= 2.57*(10**(-12))
+			return xsec
 
 
 

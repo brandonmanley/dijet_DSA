@@ -53,13 +53,16 @@ if __name__ == '__main__':
 		if ran_Q*np.sqrt(ran_z*(1-ran_z)) < 3: continue
 		######################################################
 
+		# ran_delta = 0
+
 		ran_kinematic_vars = {'s': ran_s, 'Q': ran_Q, 'x': ran_x, 'delta': ran_delta, 'pT': ran_pT, 'z': ran_z, 'y': ran_y, 'phi_kp': ran_phi_kp, 'phi_Dp': ran_phi_Dp}
 		ran_dsa = dj.get_xsec(ran_kinematic_vars, 'DSA')
 		ran_unpolar = dj.get_xsec(ran_kinematic_vars, 'unpolarized')
 
-		if ran_unpolar < 0:
-			print(ran_x, ran_pT, ran_Q, ran_z, ran_Q*np.sqrt(ran_z*(1-ran_z)))
-			continue
+		# print(ran_unpolar, ran_dsa)
+		# if ran_unpolar < np.abs(ran_dsa):
+		# 	print(ran_unpolar, ran_dsa, ran_x, ran_pT, ran_Q, ran_z)
+		# 	exit()
 
 		ran_xsec = np.exp(rng.uniform(low=ranges['log_xsec'][0], high=ranges['log_xsec'][1]))
 
