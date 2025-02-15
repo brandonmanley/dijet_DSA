@@ -17,19 +17,19 @@ if __name__ == '__main__':
 	rng = np.random.default_rng(seed=int(time.time()))
 
 	amp_ranges = {}
-	amp_ranges['Qu'] = [-10, 1]
-	amp_ranges['Qd'] = [-10, 1]
-	amp_ranges['Qs'] = [-10, 1]
-	amp_ranges['G'] = [-10, 1]
-	amp_ranges['G2'] = [-10, 1]
-	amp_ranges['Qt'] = [-10, 1]
-	amp_ranges['I3u'] = [-10, 1]
-	amp_ranges['I3d'] = [-10, 1]
-	amp_ranges['I3s'] = [-10, 1]
-	amp_ranges['I3t'] = [-10, 1]
-	amp_ranges['I4'] = [-10, 1]
-	amp_ranges['I5'] = [-10, 1]
-	amp_ranges['It'] = [-10, 1]
+	amp_ranges['Qu'] = [-10, 10]
+	amp_ranges['Qd'] = [-10, 10]
+	amp_ranges['Qs'] = [-10, 10]
+	amp_ranges['G'] = [-10, 10]
+	amp_ranges['G2'] = [-10, 10]
+	amp_ranges['Qt'] = [-10, 10]
+	amp_ranges['I3u'] = [-10, 10]
+	amp_ranges['I3d'] = [-10, 10]
+	amp_ranges['I3s'] = [-10, 10]
+	amp_ranges['I3t'] = [-10, 10]
+	amp_ranges['I4'] = [-10, 10]
+	amp_ranges['I5'] = [-10, 10]
+	amp_ranges['It'] = [-10, 10]
 
 	if ic_type == 'random_fit':
 		header = ['nrep'] + [f'{ia}{ib}' for ia in ['Qu', 'Qd', 'Qs', 'um1', 'dm1', 'sm1', 'G', 'G2'] for ib in ['a', 'b', 'c']]
@@ -49,8 +49,9 @@ if __name__ == '__main__':
 				nrep = 2
 				ic_dict[amp] = [fit_df.loc[fit_df.index[nrep], f'{amp}{ib}'] for ib in ['a', 'b', 'c']]
 
-
-	with open(f"mc_data/mc_ICs_{ic_type}.json", "w") as file: json.dump(ic_dict, file)
+	outfile = f"mc_data/mc_ICs_{ic_type}.json"
+	with open(outfile, "w") as file: json.dump(ic_dict, file)
+	print('Generated initial condition file', outfile)
 
 
 
