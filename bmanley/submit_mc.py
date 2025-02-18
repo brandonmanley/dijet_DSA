@@ -2,9 +2,9 @@ import subprocess
 import time
 
 script_to_submit = "dsa_mc.py"
-num_submissions = 5
-sample_size = 10000
-run_num = 0
+num_submissions = 10
+sample_size = 25000
+run_num = 1
 root_s = 100
 
 for i in range(num_submissions):
