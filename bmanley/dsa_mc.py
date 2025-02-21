@@ -21,13 +21,13 @@ if __name__ == '__main__':
 	dj = dutils.DijetXsec()
 	rng = np.random.default_rng(seed=int(time.time()))
 
-	ranges = {'Q': [np.sqrt(5), 10],
+	ranges = {'Q': [np.sqrt(5), 20],
 			  'rapidity': [4.62, 9.20],
-			  'delta': [0.2, 1],
-			  'pT': [1, 10],
+			  'delta': [0.2, 2],
+			  'pT': [1, 15],
 			  'phi_kp': [0, 2*np.pi],
 			  'phi_Dp': [0, 2*np.pi],
-			  'log_xsec': [-50, -5],
+			  'log_xsec': [-1, 6],
 			  'z': [0.1, 0.9]
 			}
 
@@ -53,6 +53,7 @@ if __name__ == '__main__':
 		if ran_Q*np.sqrt(ran_z*(1-ran_z)) < 3: continue
 		######################################################
 
+
 		# ran_delta = 0
 
 		ran_kinematic_vars = {'s': ran_s, 'Q': ran_Q, 'x': ran_x, 'delta': ran_delta, 'pT': ran_pT, 'z': ran_z, 'y': ran_y, 'phi_kp': ran_phi_kp, 'phi_Dp': ran_phi_Dp}
@@ -65,6 +66,8 @@ if __name__ == '__main__':
 		# 	exit()
 
 		ran_xsec = np.exp(rng.uniform(low=ranges['log_xsec'][0], high=ranges['log_xsec'][1]))
+
+		# print(ran_xsec, ran_dsa)
 
 		if ran_xsec < np.abs(ran_dsa):
 			if count == 0:
