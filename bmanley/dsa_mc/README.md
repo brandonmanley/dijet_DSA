@@ -5,6 +5,12 @@ To run the code:
 python dsa_mc.py <sample size> <output file> <root s (GeV)> 
 ```
 
+If the sample size is sufficiently large, it is usually better to run multiple instances of the script at once. In this case, one can use 
+```
+python submit_mc.py <output_directory> <n submissions> <sample_size> <root s (GeV)>
+```
+to split the sample over n files in the chosen output directory. 
+
 To adjust the initial conditions, vary the parameters in `dipoles/mc_ICs_random_fit.json`. N.B.: the initial conditions in `mc_ICs_random_fit.json` are a combination of random parameters for the moment amplitudes (since no data exists for these) and fitted parameters for the helicity amplitudes (taken from https://inspirehep.net/literature/2688257). 
 
 For all of the polarized dipoles, the following form for the initial conditions is assumed:
