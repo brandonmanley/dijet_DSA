@@ -1,8 +1,5 @@
 import numpy as np
-import matplotlib.pyplot as plt
-import pandas as pd
 import time
-from scipy.special import jv, kv
 import sys
 import dijet_utils as dutils
 
@@ -18,19 +15,20 @@ if __name__ == '__main__':
 	root_s = float(sys.argv[3])
 	fixed_s = root_s**2
 
-	print(int(time.time()))
 	# basic acceptance-rejection method of generating a finite sample
 	dj = dutils.DijetXsec()
 	rng = np.random.default_rng(seed=int(time.time()))
 
-	ranges = {'Q': [np.sqrt(5), 20],
-			  'rapidity': [4.62, 9.20],
-			  'delta': [0.2, 2],
-			  'pT': [1, 15],
-			  'phi_kp': [0, 2*np.pi],
-			  'phi_Dp': [0, 2*np.pi],
-			  'log_xsec': [-1, 6],
-			  'z': [0.1, 0.9]
+	ranges = {
+			# 'Q': [np.sqrt(5), 20],
+			'Q': [6, 20],
+			'rapidity': [4.62, 9.20],
+			'delta': [0.2, 2],
+			'pT': [1, 15],
+			'phi_kp': [0, 2*np.pi],
+			'phi_Dp': [0, 2*np.pi],
+			'log_xsec': [-1, 6],
+			'z': [0.1, 0.9]
 			}
 
 	data = []
@@ -39,6 +37,8 @@ if __name__ == '__main__':
 	print('=== root s (GeV) =', root_s)
 	print('=== starting generation of', sample_size, 'events')
 
+
+	start_time = time.perf_counter()
 	while len(data) < sample_size:
 
 		ran_Q = rng.uniform(low=ranges['Q'][0], high=ranges['Q'][1])
@@ -53,7 +53,7 @@ if __name__ == '__main__':
 		# physical constraints ###############################
 		if ran_y > 1: continue
 		if ran_delta/ran_pT > 0.25: continue
-		# if ran_Q*np.sqrt(ran_z*(1-ran_z)) < 3: continue
+		if ran_Q*np.sqrt(ran_z*(1-ran_z)) < 3: continue
 		######################################################
 
 		ran_kinematic_vars = {'s': fixed_s, 'Q': ran_Q, 'x': ran_x, 'delta': ran_delta, 'pT': ran_pT, 'z': ran_z, 'y': ran_y, 'phi_kp': ran_phi_kp, 'phi_Dp': ran_phi_Dp}
@@ -72,7 +72,7 @@ if __name__ == '__main__':
 				sys.stdout.write(f'\r[{(count*100/sample_size)}%] done ({count}/{sample_size})')
 				sys.stdout.flush()
 
-	print(int(time.time()))
+	print(time.perf_counter() - start_time)
 	try:
 		np.save(outfile, data)
 		print('\n=== saved mc data in file', outfile)

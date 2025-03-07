@@ -230,7 +230,7 @@ if __name__ == '__main__':
 	output_dir = '/Users/brandonmanley/Desktop/PhD/moment_evolution/evolved_dipoles/largeNc&Nf/'
 	ICs_tag = 'basis'
 
-	eta_max = 10
+	eta_max = 15
 	deta = 0.05
 	Nf = 3
 
