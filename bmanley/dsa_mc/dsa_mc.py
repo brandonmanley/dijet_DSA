@@ -15,6 +15,10 @@ if __name__ == '__main__':
 	root_s = float(sys.argv[3])
 	fixed_s = root_s**2
 
+	print('=== DSA for dijets MC generator ===')
+	print('== output file name:', outfile)
+	print('== root s =', root_s, 'GeV')
+
 	# basic acceptance-rejection method of generating a finite sample
 	dj = dutils.DijetXsec()
 	rng = np.random.default_rng(seed=int(time.time()))
@@ -33,12 +37,9 @@ if __name__ == '__main__':
 
 	data = []
 	count = 0
-	print('=== output file name:', outfile)
-	print('=== root s (GeV) =', root_s)
-	print('=== starting generation of', sample_size, 'events')
 
+	print('== starting generation of', sample_size, 'events')
 
-	start_time = time.perf_counter()
 	while len(data) < sample_size:
 
 		ran_Q = rng.uniform(low=ranges['Q'][0], high=ranges['Q'][1])
@@ -72,7 +73,6 @@ if __name__ == '__main__':
 				sys.stdout.write(f'\r[{(count*100/sample_size)}%] done ({count}/{sample_size})')
 				sys.stdout.flush()
 
-	print(time.perf_counter() - start_time)
 	try:
 		np.save(outfile, data)
 		print('\n=== saved mc data in file', outfile)
