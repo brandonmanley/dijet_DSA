@@ -59,15 +59,25 @@ if __name__ == '__main__':
 
 		ran_kinematic_vars = {'s': fixed_s, 'Q': ran_Q, 'x': ran_x, 'delta': ran_delta, 'pT': ran_pT, 'z': ran_z, 'y': ran_y, 'phi_kp': ran_phi_kp, 'phi_Dp': ran_phi_Dp}
 		ran_dsa = dj.get_xsec(ran_kinematic_vars, 'DSA')
-		ran_unpolar = dj.get_xsec(ran_kinematic_vars, 'unpolarized')
 		ran_xsec = np.exp(rng.uniform(low=ranges['log_xsec'][0], high=ranges['log_xsec'][1]))
 
 		if ran_xsec < np.abs(ran_dsa):
+
+			ran_unpolar = dj.get_xsec(ran_kinematic_vars, 'unpolarized')
+			ran_corrs = [
+				dj.get_correlation(ran_kinematic_vars, '<1>'),
+				dj.get_correlation(ran_kinematic_vars, '<cos(phi_kp)>'),
+				dj.get_correlation(ran_kinematic_vars, '<cos(phi_Dp)>'),
+				dj.get_correlation(ran_kinematic_vars, '<cos(phi_Dp)cos(phi_kp)>'),
+				dj.get_correlation(ran_kinematic_vars, '<sin(phi_Dp)sin(phi_kp)>')
+			]
+
+
 			if count == 0:
 				sys.stdout.write(f'\r[{int((count*100/sample_size))}%] done ({count}/{sample_size})')
 				sys.stdout.flush()
 
-			data.append(list(ran_kinematic_vars.values()) + [ran_dsa, ran_unpolar])
+			data.append(list(ran_kinematic_vars.values()) + [ran_dsa, ran_unpolar] + ran_corrs)
 			count += 1
 			if np.mod((count/sample_size)*100, 1) == 0:
 				sys.stdout.write(f'\r[{(count*100/sample_size)}%] done ({count}/{sample_size})')

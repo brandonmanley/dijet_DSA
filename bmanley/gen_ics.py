@@ -34,7 +34,7 @@ if __name__ == '__main__':
 	if ic_type == 'random_fit':
 		header = ['nrep'] + [f'{ia}{ib}' for ia in ['Qu', 'Qd', 'Qs', 'um1', 'dm1', 'sm1', 'G', 'G2'] for ib in ['a', 'b', 'c']]
 		# df = pd.read_csv('mc_data/replica_params.csv', names=headers, header=0)
-		fit_df = pd.read_csv('mc_data/replica_params.csv')
+		fit_df = pd.read_csv('dsa_mc/dipoles/replica_params.csv')
 		fit_df = fit_df.dropna(axis=1, how='all')
 		fit_df.columns = header
 
@@ -49,7 +49,7 @@ if __name__ == '__main__':
 				nrep = 2
 				ic_dict[amp] = [fit_df.loc[fit_df.index[nrep], f'{amp}{ib}'] for ib in ['a', 'b', 'c']]
 
-	outfile = f"mc_data/mc_ICs_{ic_type}.json"
+	outfile = f"mc_data/mc_ICs_{ic_type}_2.json"
 	with open(outfile, "w") as file: json.dump(ic_dict, file)
 	print('Generated initial condition file', outfile)
 

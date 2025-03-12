@@ -23,8 +23,8 @@ class DijetXsec:
 
 
 		# path to data (REPLACE WITH LOC OF DSA_MC) ################################
-		# current_dir = '/Users/brandonmanley/Desktop/PhD/dijet_dsa/bmanley/dsa_mc/'
-		current_dir = os.getcwd()
+		current_dir = '/Users/brandonmanley/Desktop/PhD/dijet_dsa/bmanley/dsa_mc/'
+		# current_dir = os.getcwd()
 		############################################################################
 
 		# load unpolarized dipole amplitude
@@ -37,7 +37,8 @@ class DijetXsec:
 		deta_str = 'd'+str(self.deta)[2:]
 		polar_indir = current_dir + f'/dipoles/{deta_str}_basis/'
 
-		ic_file = current_dir + '/dipoles/mc_ICs_random_fit.json'
+		# ic_file = current_dir + '/dipoles/mc_ICs_random_fit.json'
+		ic_file = current_dir + '/dipoles/mc_ICs_random_fit_2.json'
 		with open(ic_file, "r") as file:	
 			ics = json.load(file)
 
@@ -287,6 +288,19 @@ class DijetXsec:
 			xsec /= 2.57*(10**(-12))
 			return xsec
 
+
+	def get_correlation(self, kvar, kind):
+
+		if kind == '<1>': num = (2-kvar['y'])*self.get_coeff('A_TT', kvar)
+		elif kind == '<cos(phi_Dp)>': num = 0.5*(2-kvar['y'])*(kvar['delta']/kvar['pT'])*self.get_coeff('B_TT', kvar)
+		elif kind == '<cos(phi_kp)>': num = 0.5*np.sqrt(2-2*kvar['y'])*self.get_coeff('A_LT', kvar)
+		elif kind == '<cos(phi_Dp)cos(phi_kp)>': num = 0.25*np.sqrt(2-2*kvar['y'])*(kvar['delta']/kvar['pT'])*self.get_coeff('B_LT', kvar)
+		elif kind == '<sin(phi_Dp)sin(phi_kp)>': num = 0.25*np.sqrt(2-2*kvar['y'])*(kvar['delta']/kvar['pT'])*self.get_coeff('C_LT', kvar)
+		else: raise ValueError(f'Error: Correlation {kind} not recognized')
+
+		den = (1 + (1-kvar['y'])**2)*self.get_coeff('A_TT_unpolar', kvar) + 4*(1-kvar['y'])*self.get_coeff('A_LL_unpolar', kvar)
+			
+		return num/den
 
 
 	# filter unpolarized dipole before double bessel to save time
