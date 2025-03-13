@@ -5,6 +5,8 @@ from scipy.special import jv, kv
 import json
 from scipy.interpolate import RegularGridInterpolator
 import os
+import matplotlib.pyplot as plt
+from matplotlib.ticker import MaxNLocator
 
 
 class DijetXsec:
@@ -141,13 +143,13 @@ class DijetXsec:
 	def get_coeff(self, flavor, kvar):
 
 		Zfsq = self.Zusq + self.Zdsq + self.Zssq
-		prefactor = self.alpha_em*(self.Nc**2)
+		prefactor = self.alpha_em*(self.Nc**2)*(kvar['Q']**2)
 
-		if 'TT_unpolar' in flavor: prefactor *= Zfsq*(4*(kvar['Q']**2)*(kvar['z']**2)*((1-kvar['z'])**2)*((kvar['z'])**2 + (1-kvar['z'])**2))/(2*(np.pi**4))
-		elif 'LL_unpolar' in flavor: prefactor *= Zfsq*(8*(kvar['Q']**2)*(kvar['z']**3)*((1-kvar['z'])**3))/(2*(np.pi**4))
-		elif 'TmT_unpolar' in flavor: prefactor *= Zfsq*(-8*(kvar['Q']**2)*(kvar['z']**3)*((1-kvar['z'])**3))/(2*(np.pi**4))
-		elif 'TT' in flavor: prefactor *= -((kvar['Q']**2)*kvar['z']*(1-kvar['z']))/(2*(np.pi**4)*kvar['s']*kvar['y'])
-		elif 'LT' in flavor: prefactor *= -((kvar['Q']**2)*((kvar['z']*(1-kvar['z']))**1.5))/(np.sqrt(2)*(np.pi**4)*kvar['s']*kvar['y'])
+		if 'TT_unpolar' in flavor: prefactor *= Zfsq*(4*(kvar['z']**2)*((1-kvar['z'])**2)*((kvar['z'])**2 + (1-kvar['z'])**2))/(2*(np.pi**4))
+		elif 'LL_unpolar' in flavor: prefactor *= Zfsq*(8*(kvar['z']**3)*((1-kvar['z'])**3))/(2*(np.pi**4))
+		elif 'TmT_unpolar' in flavor: prefactor *= Zfsq*(-8*(kvar['z']**3)*((1-kvar['z'])**3))/(2*(np.pi**4))
+		elif 'TT' in flavor: prefactor *= -(kvar['z']*(1-kvar['z']))/(2*(np.pi**4)*kvar['s']*kvar['y'])
+		elif 'LT' in flavor: prefactor *= -((kvar['z']*(1-kvar['z']))**1.5)/(np.sqrt(2)*(np.pi**4)*kvar['s']*kvar['y'])
 
 		if flavor == 'A_TT':
 			Qu_11 = self.double_bessel(kvar, [[1,1,0,0]], 'Qu')
@@ -311,6 +313,123 @@ class DijetXsec:
 		if closest_y.empty: raise ValueError('Requested rapdity, Y=', np.log(1/x), ', does not exist in the data file')
 		else: closest_y = closest_y.iloc[0]
 		self.f_ndipole = self.ndipole[np.isclose(self.ndipole['y'], closest_y, atol=0.005)]
+
+
+
+
+
+# function to plot histograms (documentation can be found in README)
+def plot_histogram(dfs, plot_var, weights, constraints={}, **options):
+
+	labels = {
+		'num_dsa': 'DSA',
+		'den_dsa': 'Total',
+		'<1>': r'$A_{LL}$',
+		'<cos(phi_kp)>': r'$\langle \cos(\phi_{kp}) \rangle$',
+		'<cos(phi_Dp)>': r'$\langle \cos(\phi_{\Delta p}) \rangle$',
+		'<cos(phi_Dp)cos(phi_kp)>': r'$\langle \cos(\phi_{kp}) \cos(\phi_{\Delta p}) \rangle$',
+		'<sin(phi_Dp)sin(phi_kp)>': r'$\langle \sin(\phi_{kp}) \sin(\phi_{\Delta p}) \rangle$'
+	}
+
+	asp_ratio = 6/3
+	psize = 4
+
+	fig, axs = plt.subplots(1, 2, figsize=(asp_ratio*psize, psize), sharex=True, gridspec_kw={'width_ratios': [5, 1]})
+
+	colors = ['black', 'red', 'blue', 'green']
+	linestyles = ['-', '--', '-.']
+
+	lumi = options.get('lumi', 10) # total integrated luminosity in fb^-1
+	lumi *= options.get('efficiency', 1) # correct for detector efficiency
+
+	for idf, df in enumerate(dfs):
+
+		# make bins
+		range = [df[plot_var].min(), df[plot_var].max()]
+		nbins = options.get('nbins', 10)
+		bin_width = options.get('binwidth', (range[1] - range[0])/nbins)
+		bins = options.get('bins', np.arange(np.floor(range[0]/bin_width)*bin_width, np.ceil(range[1]/bin_width)*bin_width, bin_width))
+
+		# enforce constraints
+		mask = pd.Series(True, index=df.index)
+		for var, (low, high) in constraints.items(): mask &= df[var].between(low, high)
+		fixed_df = df[mask]
+
+		if fixed_df.empty:
+			print('Error: selected dataframe is empty - constraints are too strict')
+			return
+
+		for iw in weights: assert iw in list(df.columns), f'Error: option for weight {iw} not recognized'
+
+		# make plot data         
+		for iw, weight in enumerate(weights):
+
+			total_counts, plot_bins = np.histogram(fixed_df[plot_var], bins=bins, weights=fixed_df['den_dsa'])
+			plot_counts, _ = np.histogram(fixed_df[plot_var], bins=bins, weights=fixed_df[weight])
+			bin_centers = 0.5*(plot_bins[:-1]+plot_bins[1:])
+
+			# ensure bins are properly averaged
+			n_entries, _ = np.histogram(fixed_df[plot_var], bins=bins)
+			plot_counts = np.array([icount/(bin_width*ientry) if ientry != 0 else 0 for icount, ientry in zip(plot_counts, n_entries)])
+			total_counts = np.array([icount/(bin_width*ientry) if ientry != 0 else 0 for icount, ientry in zip(total_counts, n_entries)])
+
+			# errors are calculated for a given integrated luminosity (5% systematic error added per 1505.05783)
+			if '<' in weight:
+				stat_errors = np.array([np.sqrt((1+ic)/(lumi*tc)) if tc != 0 else 0 for ic, tc in zip(plot_counts, total_counts)])
+			else:
+				stat_errors = np.sqrt(total_counts/lumi)
+			sys_errors = 0.05*np.abs(plot_counts)  
+			total_errors = np.sqrt((stat_errors**2)+(sys_errors)**2)
+
+			# make data plot
+			axs[0].errorbar(
+				bin_centers, plot_counts, yerr=total_errors,
+				fmt=options.get('fmt', 'o'), 
+				capsize=3, elinewidth=0.5, capthick=0.5, color=colors[iw + idf]
+			)
+			if len(dfs) > 1: plot_label = labels[weight] + f'({idf})'
+			else: plot_label = labels[weight] 
+			axs[0].step(bin_centers, plot_counts, where='mid', linestyle=linestyles[idf], color=colors[iw+idf], label=plot_label, linewidth=1)
+
+		axs[0].legend(frameon=False)
+
+		# make info box for constraints
+		info_text = fr'Integrated luminosity: ${lumi}\,\, \mathrm{{fb}}^{{-1}}$'+'\n'
+		info_text += fr'$\sqrt{{s}} = {round(np.sqrt(df['s'][0]))}\,\, \mathrm{{GeV}}$'+'\n'
+		info_text += '\nCuts:'
+		for var, (low, high) in constraints.items():
+			if var == 'Q' or var == 'pT' or var == 'delta':
+				info_text += '\n'+ fr'$ {low} < {var}\,[\mathrm{{GeV}}] < {high}$'
+			elif var == 't':
+				info_text += '\n'+ fr'$ {low} < {var}\,[\mathrm{{GeV}}^2] < {high}$'
+			else:
+				info_text += '\n' + fr'$ {low} < {var} < {high}$'
+		axs[1].text(
+			0.0, 0.0, info_text, 
+			ha='left', va='bottom', 
+			fontsize=12, wrap=True, 
+			bbox=dict(boxstyle='round', facecolor='white', alpha=0.3)
+		)
+		axs[1].set_axis_off()
+
+		# set plot info
+		if options.get('y_limits'): axs[0].set_ylim(options.get('y_limits'))
+		axs[0].set_xlim(options.get('x_limits', [plot_bins[0], plot_bins[-1]]))
+		axs[0].set_title(options.get('title', ''))
+		axs[0].set_ylabel(options.get('y_label', 'Frequency'), loc='top')
+		axs[0].set_xlabel(options.get('x_label', fr'${plot_var}$'), loc='right')
+		axs[0].set_yscale(options.get('y_scale', 'linear'))
+		axs[0].set_xscale(options.get('x_scale', 'linear'))
+		axs[0].tick_params(axis="both", direction="in", length=5, width=1, which='both', right=True, top=True)
+		axs[0].grid(options.get('grid', False)) 
+		axs[0].xaxis.set_major_locator(MaxNLocator(nbins=10))
+		if options.get('zero_line', False): axs[0].axhline(y=0, color='gray', linestyle='--', linewidth=1)
+		if options.get('min_pT_line', False) and plot_var == 'pT': 
+			axs[0].axvline(x=1, color='gray', linestyle='--')
+			axs[0].fill_betweenx(axs[0].get_ylim(), axs[0].get_xlim()[0], 1, color='gray', alpha=0.25)
+
+		if options.get('saveas'): fig.savefig(options.get('saveas'), dpi=400, bbox_inches="tight")
+		plt.tight_layout()
 
 
 
