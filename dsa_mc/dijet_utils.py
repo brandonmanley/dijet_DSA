@@ -25,8 +25,8 @@ class DijetXsec:
 
 
 		# path to data (REPLACE WITH LOC OF DSA_MC) ################################
-		current_dir = '/Users/brandonmanley/Desktop/PhD/dijet_dsa/bmanley/dsa_mc/'
-		# current_dir = os.getcwd()
+		# current_dir = '/Users/brandonmanley/Desktop/PhD/dijet_dsa/bmanley/dsa_mc/'
+		current_dir = os.path.dirname(os.path.abspath(__file__))
 		############################################################################
 
 		# load unpolarized dipole amplitude

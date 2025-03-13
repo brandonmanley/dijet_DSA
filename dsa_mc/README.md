@@ -1,7 +1,7 @@
 ## General info 
 dsa_mc provides a Monte-Carlo implementation of the expressions for the DSA in diffractive dijet production studied in [https://inspirehep.net/literature/2843086](https://inspirehep.net/literature/2843086). 
 
-To produce a MC sample: **N.B.: change the location of this directory on your local system**
+To produce a MC sample:
 ```
 python dsa_mc.py <sample size> <output file> <root s (GeV)> 
 ```
