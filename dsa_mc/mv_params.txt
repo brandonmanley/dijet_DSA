@@ -1,0 +1,5 @@
+sigma0/2 (mb)	Qs0^2 (GeV^2)	C^2	\gamma	e_c
+32.77/2.0	0.15		6.5	1.13	1	(Albacete et al 2009) = AAMS09
+13.9		0.077		4.47	1.01	15.6	(Casuga et al 2024) = CKM24
+
+20		1.0		10	1.2	2	(testing) = test

@@ -214,7 +214,7 @@ def evolve(deta, eta_max, Nf=3.0, ICs='ones', coupling='fixed', s0=1.0):
 			I4[i, j] = I4[i, j-1] + I40[i, j] - I40[i, j-1]
 			I4[i, j] += 0.5*d2*np.trace(deta*alpha_s(cp,np.arange(i))[:, np.newaxis]*(4*I4[:i, j-i:j] + 2*I5[:i, j-i:j] + G2[:i, j-i:j]))
 			
-			Gm4[i, i, j] = I4[i, j] 
+			Gm4[i, i, j] = I4[i, j]
 			Gm4[i, i+1:j+1, j] = Gm4[i, i:j, j-1] + (I40[i, j] - I40[i, j-1])
 			
 			I5[i, j] = I5[i, j-1] + I50[i, j] - I50[i, j-1]
