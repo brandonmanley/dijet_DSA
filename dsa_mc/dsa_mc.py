@@ -1,7 +1,8 @@
 import numpy as np
 import time
 import sys
-import dijet_utils as dutils
+import dijet
+from dataclasses import asdict
 
 
 if __name__ == '__main__':
@@ -20,7 +21,7 @@ if __name__ == '__main__':
 	print('== root s =', root_s, 'GeV')
 
 	# basic acceptance-rejection method of generating a finite sample
-	dj = dutils.DijetXsec()
+	dj = dijet.DIJET()
 	rng = np.random.default_rng(seed=int(time.time()))
 
 	ranges = {
@@ -31,7 +32,7 @@ if __name__ == '__main__':
 			'pT': [1, 15],
 			'phi_kp': [0, 2*np.pi],
 			'phi_Dp': [0, 2*np.pi],
-			'log_xsec': [-1, 6],
+			'log_xsec': [-1, 4],
 			'z': [0.1, 0.9]
 			}
 
@@ -57,13 +58,16 @@ if __name__ == '__main__':
 		if ran_Q*np.sqrt(ran_z*(1-ran_z)) < 3: continue
 		######################################################
 
-		ran_kinematic_vars = {'s': fixed_s, 'Q': ran_Q, 'x': ran_x, 'delta': ran_delta, 'pT': ran_pT, 'z': ran_z, 'y': ran_y, 'phi_kp': ran_phi_kp, 'phi_Dp': ran_phi_Dp}
-		ran_dsa = dj.get_xsec(ran_kinematic_vars, 'DSA')
+
+		ran_kinematic_vars = dijet.Kinematics(s=fixed_s, Q= ran_Q, x= ran_x, delta= ran_delta, pT= ran_pT, z= ran_z, y= ran_y, phi_kp= ran_phi_kp, phi_Dp= ran_phi_Dp)
+		ran_dsa = dj.get_xsec(ran_kinematic_vars, 'DSA', 'dx')
 		ran_xsec = np.exp(rng.uniform(low=ranges['log_xsec'][0], high=ranges['log_xsec'][1]))
+
+		# print(ran_dsa, ran_xsec)
 
 		if ran_xsec < np.abs(ran_dsa):
 
-			ran_unpolar = dj.get_xsec(ran_kinematic_vars, 'unpolarized')
+			ran_unpolar = dj.get_xsec(ran_kinematic_vars, 'unpolarized', 'dx')
 			ran_corrs = [
 				dj.get_correlation(ran_kinematic_vars, '<1>'),
 				dj.get_correlation(ran_kinematic_vars, '<cos(phi_kp)>'),
@@ -77,7 +81,7 @@ if __name__ == '__main__':
 				sys.stdout.write(f'\r[{int((count*100/sample_size))}%] done ({count}/{sample_size})')
 				sys.stdout.flush()
 
-			data.append(list(ran_kinematic_vars.values()) + [ran_dsa, ran_unpolar] + ran_corrs)
+			data.append(list(asdict(ran_kinematic_vars).values()) + [ran_dsa, ran_unpolar] + ran_corrs)
 			count += 1
 			if np.mod((count/sample_size)*100, 1) == 0:
 				sys.stdout.write(f'\r[{(count*100/sample_size)}%] done ({count}/{sample_size})')

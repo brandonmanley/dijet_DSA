@@ -1,1 +1,9 @@
-./build/bin/rcbk -ic MV 0.15 1.13 0.01 1 -alphas_scaling 6.5 -rc BALITSKY -output datafile -maxy 10 -minr 1e-6 -fast 2>/dev/null
+
+
+
+AAMS: 
+./build/bin/rcbk -ic MV 0.15 1.13 0.01 1 -alphas_scaling 6.5 -rc BALITSKY -output datafile_AAMS09.dat -maxy 19 -minr 1e-6 -fast 2>/dev/null
+
+
+CKM:
+./build/bin/rcbk -ic MV 0.077 1.01 0.01 15.6 -alphas_scaling 4.47 -rc BALITSKY -output datafile_CKM24.dat -maxy 19 -minr 1e-6 -fast 2>/dev/null
