@@ -127,8 +127,9 @@ class DIJET:
 		# unpolar_input_file = self.current_dir + '/dipoles/narr_ymin4.61_ymax9.81_Qs2_0.3.dat'
 
 		self.ndipole = np.loadtxt(unpolar_input_file)
-		print('Using N data from', unpolar_input_file)
 
+		print('loaded N(r^2, s) data from', unpolar_input_file)
+		print('loaded polarized amp data from', polar_indir)
 
 		# grid values for dipoles
 		n_psteps = len(self.basis_dipoles['Qu']['Qu']['eta'])
@@ -163,6 +164,7 @@ class DIJET:
 		
 		sdf = self.params[self.params['nrep'] == nreplica]
 		assert len(sdf) == 1, 'Error: more than 1 replica selected...'
+		print('loaded replica', nreplica)
 
 		ic_params = {}
 
@@ -212,9 +214,10 @@ class DIJET:
 			maxr_index = len(self.logr_values)
 
 			if self.old_rap:
-				target_y_index = round((1/self.dlogr)*(np.log(1/x) - 4.61))
+				target_eta_index = round((1/self.dlogr)*(np.log(1/x) - 4.61))
 			else:
 				target_eta_index = round((1/self.dlogr)*(target_eta - 4.61))
+
 			if self.mv_only: target_eta_index = 0
 
 			if target_eta_index < 0: raise ValueError(f"requested Y={target_eta} does not exist in N")
@@ -750,6 +753,91 @@ class DIJET:
 		return Del_G
 
 
+	# returns Lq
+	def get_Lq(self, kvar, flavor):
+		G = self.pdipoles[f'Q{flavor}'] + 3*self.pdipoles['G2'] - self.pdipoles[f'I3{flavor}'] + 2*self.pdipoles['I4'] - self.pdipoles['I5']
+		x, Q2 = kvar.x, kvar.Q**2
+
+		lam2smx = 1
+		Nc = 3.0
+		x0 = 1.0
+		eta0 = np.sqrt(Nc/(2*np.pi))*np.log(1/x0)
+		eta0index = int(np.ceil(eta0/self.deta))+1
+
+		eta = np.sqrt(Nc/(2*np.pi))*np.log(1/x)
+
+		jetai = int(np.ceil(np.sqrt(Nc/(2.*np.pi))*np.log(1./x)/self.deta))
+		jetaf = int(np.ceil(np.sqrt(Nc/(2.*np.pi))*np.log(Q2/(x*lam2smx))/self.deta))
+
+		g1plus=0
+		
+		for j in range(eta0index,jetai):
+			si = 0
+			sf = int(np.ceil(round((self.deta*(j)-eta0)/self.deta,6))) #1 + np.int(np.ceil((deta*(j-1)-eta0)/deta))
+			
+			for i in range(si,sf): 
+				g1plus = g1plus + self.deta*self.deta * G[i,j]
+
+		for j in range(jetai,jetaf):
+			si = int(np.ceil((self.deta*(j)-np.sqrt(Nc/(2*np.pi))*np.log(1./x))/self.deta))
+			sf = int(np.ceil(round((self.deta*(j)-eta0)/self.deta,6))) #1 + np.int(np.ceil((deta*(j-1)-eta0)/deta))
+			for i in range(si,sf): 
+				g1plus = g1plus + self.deta*self.deta * G[i,j]
+
+		g1plus = (1./(np.pi**2)) * g1plus
+		
+		return g1plus
+
+
+	def get_Lsinglet(self,kvar): # returns \sum_f(L_)(x)
+		Lsinglet = self.get_Lq(kvar, 'u') + self.get_Lq(kvar, 'd') + self.get_Lq(kvar, 's')
+		return Lsinglet
+
+
+	def get_LG(self,kvar):
+		s10 = np.sqrt(3.0/(2*np.pi))*np.log((kvar.Q**2)/(self.lambdaIR**2))
+		s10_index = int(np.ceil(s10/self.deta))
+		eta_index = int(np.ceil(np.sqrt(3.0/(2*np.pi))*np.log((kvar.Q**2)/(kvar.x*(self.lambdaIR**2)))/self.deta))
+		L_G = -(1/self.alpha_s(True, 0, s10))*((2*3.0)/(np.pi**2))*(2*self.pdipoles['I4'][s10_index, eta_index] + 3*self.pdipoles['I5'][s10_index, eta_index])
+		return L_G
+
+
+	def get_IntegratedPDF(self, kind, xmin=10**(-5), xmax=0.1):
+		npoints = 40
+		x_values = np.logspace(np.log(xmin), np.log(xmax), npoints)
+
+		kins = Kinematics()
+
+		integral = 0
+		for ix, x in enumerate(x_values):
+			if ix == len(x_values)-1: continue
+
+			kins.x = x
+			dx = x_values[ix+1] - x
+
+			value = 0
+			if kind == 'Lq':
+				value = self.get_Lsinglet(kins)
+			elif kind == 'LG':
+				value = self.get_Lsinglet(kins)
+			elif kind == 'DeltaSigma':
+				value = self.get_DeltaSigma(kins)
+			elif kind == 'DeltaG':
+				value = self.get_DeltaG(kins)
+			elif kind == 'helicity':
+				value = self.get_DeltaG(kins) + 0.5*self.get_DeltaSigma(kins)
+			elif kind == 'oam':
+				value = self.get_Lsinglet(kins) + self.get_LG(kins)
+
+			integral += dx*value
+
+		return integral
+
+
+
+
+
+
 
 
 if __name__ == '__main__':
@@ -768,21 +856,20 @@ if __name__ == '__main__':
 
 	dj = DIJET(1)
 
-	print('DSA', dj.get_xsec(tkvar, 'DSA'))
-	print('Total', dj.get_xsec(tkvar, 'unpolarized'))
-	print('Total', dj.get_xsec(tkvar, 'unpolarized_integrated'))
+	print('DSA', dj.get_xsec(tkvar, 'DSA', 'dx'))
+	print('Total', dj.get_xsec(tkvar, 'unpolarized','dx'))
+	print('Total', dj.get_xsec(tkvar, 'unpolarized_integrated', 'dx'))
 
 
 	t_range = [0, 0.5]
-	x_range = [5*(10**(-5)), 0.01]
+	x_range = [6*(10**(-5)), 0.01]
 	pT_range = [5, 15] 
 	z_range = [0.3, 0.7]
 	Q_range = [5, 10]
 
-	print(dj.dxsec_dQ2(8, 100**2, x_range, z_range, pT_range, t_range))
-	print(dj.dxsec_dpT(5, 100**2, x_range, z_range, Q_range, t_range))
-	print(dj.dxsec_dt(0.2, 100**2, x_range, z_range, Q_range, pT_range))
-# 
+	print(dj.dxsec_dQ2(8, 320**2, x_range, z_range, pT_range, t_range))
+	print(dj.dxsec_dpT(5, 320**2, x_range, z_range, Q_range, t_range))
+	print(dj.dxsec_dt(0.2, 320**2, x_range, z_range, Q_range, pT_range))
 
 
 		

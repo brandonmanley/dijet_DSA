@@ -21,14 +21,11 @@ if __name__ == '__main__':
 	print('== root s =', root_s, 'GeV')
 
 	# basic acceptance-rejection method of generating a finite sample
-	dj = dijet.DIJET()
-	rng = np.random.default_rng(seed=int(time.time()))
-
 	ranges = {
 			# 'Q': [np.sqrt(5), 20],
-			'Q': [6, 20],
+			'Q': [4, 10],
 			'rapidity': [4.62, 9.20],
-			'delta': [0.2, 2],
+			'delta': [0.1, 0.2],
 			'pT': [1, 15],
 			'phi_kp': [0, 2*np.pi],
 			'phi_Dp': [0, 2*np.pi],
@@ -36,7 +33,16 @@ if __name__ == '__main__':
 			'z': [0.1, 0.9]
 			}
 
+	print('== parameter ranges:')
+	for ivar, irange in ranges.items():
+		print(ivar, irange)
+
+	dj = dijet.DIJET(nreplica=1)
+	dj.load_params('replica_params_pp.csv')
+	# dj.set_params(1)
+
 	data = []
+	rng = np.random.default_rng(seed=int(time.time()))
 	count = 0
 
 	print('== starting generation of', sample_size, 'events')
@@ -55,7 +61,7 @@ if __name__ == '__main__':
 		# physical constraints ###############################
 		if ran_y > 1: continue
 		if ran_delta/ran_pT > 0.25: continue
-		if ran_Q*np.sqrt(ran_z*(1-ran_z)) < 3: continue
+		if ran_Q*np.sqrt(ran_z*(1-ran_z)) < 2: continue
 		######################################################
 
 
