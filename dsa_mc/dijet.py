@@ -142,8 +142,8 @@ class DIJET:
 
 
 	def load_params(self, params_file='replica_params_old.csv'):
-		# load initial condition parameters
 
+		# load initial condition parameters
 		if params_file == 'replica_params_old.csv':
 			fdf = pd.read_csv(self.current_dir + f'/dipoles/{params_file}')
 			header = ['nrep'] + [f'{ia}{ib}' for ia in ['Qu', 'Qd', 'Qs', 'um1', 'dm1', 'sm1', 'GT', 'G2'] for ib in ['eta', 's10', '1']]
@@ -156,7 +156,11 @@ class DIJET:
 		fdf.columns = header
 		self.params = fdf
 
+		# load moment parameters (random)
+		self.mom_params = pd.read_csv(self.current_dir + '/dipoles/random_moment_params.csv')
+
 		print('loaded params from', params_file)
+		print('loaded random moment params from random_moment_params.csv')
 
 
 	def set_params(self, nreplica=1):
@@ -166,6 +170,10 @@ class DIJET:
 		assert len(sdf) == 1, 'Error: more than 1 replica selected...'
 		print('loaded replica', nreplica)
 
+		smdf = self.mom_params[self.mom_params['nrep'] == nreplica]
+		assert len(smdf) == 1, 'Error: more than 1 replica selected...'
+		# print('loaded replica', nreplica)
+
 		ic_params = {}
 
 		for amp in ['Qu', 'Qd', 'Qs', 'GT', 'G2', 'I3u', 'I3d', 'I3s', 'I3T', 'I4', 'I5']:
@@ -174,7 +182,7 @@ class DIJET:
 				if amp in ['Qu', 'Qd', 'Qs', 'GT', 'G2']: ic_params[amp][basis] = sdf[f'{amp}{basis}'].iloc[0]
 				else: 
 					if self.fix_moments: ic_params[amp][basis] = 1
-					else: ic_params[amp][basis] = random.uniform(-10, 10)
+					else: ic_params[amp][basis] = ic_params[amp][basis] = smdf[f'{amp}{basis}'].iloc[0]
 
 
 		self.pdipoles = {}
@@ -802,32 +810,32 @@ class DIJET:
 		return L_G
 
 
-	def get_IntegratedPDF(self, kind, xmin=10**(-5), xmax=0.1):
+	def get_IntegratedPDF(self, kvar, kind, xmin=10**(-5), xmax=0.1):
 		npoints = 40
-		x_values = np.logspace(np.log(xmin), np.log(xmax), npoints)
-
-		kins = Kinematics()
+		x_values = np.logspace(np.log10(xmin), np.log10(xmax), npoints)
 
 		integral = 0
 		for ix, x in enumerate(x_values):
-			if ix == len(x_values)-1: continue
+			# if ix == len(x_values) - 1: continue
+			if ix == 0: continue
 
-			kins.x = x
-			dx = x_values[ix+1] - x
+			kvar.x = x
+			# dx = np.abs(x_values[ix+1] - x)
+			dx = np.abs(x - x_values[ix-1])
 
 			value = 0
 			if kind == 'Lq':
-				value = self.get_Lsinglet(kins)
+				value = self.get_Lsinglet(kvar)
 			elif kind == 'LG':
-				value = self.get_Lsinglet(kins)
+				value = self.get_Lsinglet(kvar)
 			elif kind == 'DeltaSigma':
-				value = self.get_DeltaSigma(kins)
+				value = self.get_DeltaSigma(kvar)
 			elif kind == 'DeltaG':
-				value = self.get_DeltaG(kins)
+				value = self.get_DeltaG(kvar)
 			elif kind == 'helicity':
-				value = self.get_DeltaG(kins) + 0.5*self.get_DeltaSigma(kins)
+				value = self.get_DeltaG(kvar) + 0.5*self.get_DeltaSigma(kvar)
 			elif kind == 'oam':
-				value = self.get_Lsinglet(kins) + self.get_LG(kins)
+				value = self.get_Lsinglet(kvar) + self.get_LG(kvar)
 
 			integral += dx*value
 
@@ -860,6 +868,8 @@ if __name__ == '__main__':
 	print('Total', dj.get_xsec(tkvar, 'unpolarized','dx'))
 	print('Total', dj.get_xsec(tkvar, 'unpolarized_integrated', 'dx'))
 
+	print(dj.get_IntegratedPDF(tkvar, 'DeltaSigma'))
+
 
 	t_range = [0, 0.5]
 	x_range = [6*(10**(-5)), 0.01]
@@ -867,9 +877,9 @@ if __name__ == '__main__':
 	z_range = [0.3, 0.7]
 	Q_range = [5, 10]
 
-	print(dj.dxsec_dQ2(8, 320**2, x_range, z_range, pT_range, t_range))
-	print(dj.dxsec_dpT(5, 320**2, x_range, z_range, Q_range, t_range))
-	print(dj.dxsec_dt(0.2, 320**2, x_range, z_range, Q_range, pT_range))
+	# print(dj.dxsec_dQ2(8, 320**2, x_range, z_range, pT_range, t_range))
+	# print(dj.dxsec_dpT(5, 320**2, x_range, z_range, Q_range, t_range))
+	# print(dj.dxsec_dt(0.2, 320**2, x_range, z_range, Q_range, pT_range))
 
 
 		
