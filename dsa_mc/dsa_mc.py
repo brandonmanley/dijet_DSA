@@ -26,7 +26,7 @@ if __name__ == '__main__':
 			'Q': [4, 10],
 			'rapidity': [4.62, 9.20],
 			'delta': [0.1, 0.2],
-			'pT': [1, 15],
+			'pT': [0, 15],
 			'phi_kp': [0, 2*np.pi],
 			'phi_Dp': [0, 2*np.pi],
 			'log_xsec': [-1, 4],
@@ -39,7 +39,7 @@ if __name__ == '__main__':
 
 	dj = dijet.DIJET(nreplica=1)
 	dj.load_params('replica_params_pp.csv')
-	# dj.set_params(1)
+	dj.set_params(34)
 
 	data = []
 	rng = np.random.default_rng(seed=int(time.time()))
@@ -73,7 +73,7 @@ if __name__ == '__main__':
 
 		if ran_xsec < np.abs(ran_dsa):
 
-			ran_unpolar = dj.get_xsec(ran_kinematic_vars, 'unpolarized', 'dx')
+			ran_unpolar = dj.get_xsec(ran_kinematic_vars, 'unpolarized_integrated', 'dx')
 			ran_corrs = [
 				dj.get_correlation(ran_kinematic_vars, '<1>'),
 				dj.get_correlation(ran_kinematic_vars, '<cos(phi_kp)>'),

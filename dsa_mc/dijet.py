@@ -10,6 +10,7 @@ import _pickle as cPickle
 import sys
 import zlib
 from dataclasses import dataclass
+from scipy.integrate import quad,fixed_quad
 
 
 def load(name): 
@@ -54,7 +55,7 @@ class Kinematics:
 
 
 class DIJET:
-	def __init__(self, nreplica=1, lambdaIR=0.3, deta=0.05, gauss_param=0.0, mv_only=False, fix_moments=False, old_rap=False): 
+	def __init__(self, nreplica=1, lambdaIR=0.3, deta=0.05, gauss_param=0.0, mv_only=False, fix_moments=False, old_rap=False, corrected_evo=False): 
 
 		# define physical constants
 		self.alpha_em = 1/137.0
@@ -80,6 +81,8 @@ class DIJET:
 		self.old_rap = old_rap
 		if old_rap: print('Using ln(1/x) in argument of N!')
 
+		self.corrected_evo = corrected_evo
+		if corrected_evo: print('Using corrected evolution')
 
 		self.current_dir = os.path.dirname(os.path.abspath(__file__))
 
@@ -92,15 +95,22 @@ class DIJET:
 
 		# load polarized dipole amplitudes 
 		deta_str = 'd'+str(self.deta)[2:]
-		polar_indir = self.current_dir + f'/dipoles/{deta_str}-etamax15-rc/'
+		polar_indir = self.current_dir + f'/dipoles/{deta_str}-rc/'
+		amps = ['Qu', 'Qd', 'Qs', 'GT', 'G2', 'I3u', 'I3d', 'I3s', 'I3T', 'I4', 'I5']
+
+		if self.corrected_evo: 
+			self.deta = 0.08 # only one supported right now
+			polar_indir = self.current_dir + f'/dipoles/d08-rc-corrected/'
+			amps = ['Qu', 'Qd', 'Qs', 'GT', 'G2', 'QTu', 'QTd', 'QTs', 'I3u', 'I3d', 'I3s', 'I3T', 'I4', 'I5']
 
 		self.basis_dipoles = {}
-		# amps = ['Qu', 'Qd', 'Qs', 'GT', 'G2', 'QTu', 'QTd', 'QTs', 'I3u', 'I3d', 'I3s', 'I3T', 'I4', 'I5', 'ITu', 'ITd', 'ITs']
-		amps = ['Qu', 'Qd', 'Qs', 'GT', 'G2', 'I3u', 'I3d', 'I3s', 'I3T', 'I4', 'I5']
-		# amps = ['Qu', 'Qd', 'Qs', 'GT', 'G2']
+
+		bad_amps = ['GT', 'QTu', 'QTd', 'QTs', 'I3T', 'ITu', 'ITd', 'ITs']
+		if self.corrected_evo: 
+			bad_amps = ['GT', 'I3T', 'ITu', 'ITd', 'ITs']
 
 		for iamp in amps:
-			if iamp in ['GT', 'QTu', 'QTd', 'QTs', 'I3T', 'ITu', 'ITd', 'ITs']: continue
+			if iamp in bad_amps: continue
 
 			self.basis_dipoles[iamp] = {}
 			input_dipole = 0
@@ -141,26 +151,42 @@ class DIJET:
 		self.logr_values = np.arange(-13.8, round(np.log(1/self.lambdaIR), 2), self.dlogr)
 
 
-	def load_params(self, params_file='replica_params_old.csv'):
+	def load_params(self, params_file='replica_params_dis.csv'):
 
 		# load initial condition parameters
-		if params_file == 'replica_params_old.csv':
+		if params_file == 'replica_params_dis.csv':
 			fdf = pd.read_csv(self.current_dir + f'/dipoles/{params_file}')
 			header = ['nrep'] + [f'{ia}{ib}' for ia in ['Qu', 'Qd', 'Qs', 'um1', 'dm1', 'sm1', 'GT', 'G2'] for ib in ['eta', 's10', '1']]
 
-		else:
+		elif params_file == 'replica_params_pp.csv':
 			fdf = pd.read_csv(self.current_dir + f'/dipoles/{params_file}')
 			header = ['nrep', 'sol', 'chi'] + [f'{ia}{ib}' for ia in ['Qu', 'Qd', 'Qs', 'um1', 'dm1', 'sm1', 'GT', 'G2'] for ib in ['eta', 's10', '1']]
-			
+
+		if self.corrected_evo:
+			params_file = 'replica_params_dis_corrected.csv'
+			fdf = pd.read_csv(self.current_dir + f'/dipoles/{params_file}')
+
+			header = ['nrep']
+			for ia in ['Qu', 'Qd', 'Qs', 'um1', 'dm1', 'sm1', 'GT', 'G2', 'QTu', 'QTd', 'QTs']:
+				for ib in ['eta', 's10', '1']:
+					if ia in ['GT', 'QTu', 'QTd', 'QTs'] and ib in ['eta', '1']: continue
+					header.append(f'{ia}{ib}')
+
+
 		fdf = fdf.dropna(axis=1, how='all')
 		fdf.columns = header
 		self.params = fdf
 
 		# load moment parameters (random)
-		self.mom_params = pd.read_csv(self.current_dir + '/dipoles/random_moment_params.csv')
+		if 'dis' in params_file:
+			mom_params_file = self.current_dir + '/dipoles/moment_params_dis.csv'
+		else:
+			mom_params_file = self.current_dir + '/dipoles/moment_params_pp.csv'
+
+		self.mom_params = pd.read_csv(mom_params_file)
 
 		print('loaded params from', params_file)
-		print('loaded random moment params from random_moment_params.csv')
+		print('loaded random moment params from', mom_params_file)
 
 
 	def set_params(self, nreplica=1):
@@ -176,13 +202,98 @@ class DIJET:
 
 		ic_params = {}
 
+		amps = ['Qu', 'Qd', 'Qs', 'GT', 'G2', 'I3u', 'I3d', 'I3s', 'I3T', 'I4', 'I5']
+		if self.corrected_evo: 
+			amps = ['Qu', 'Qd', 'Qs', 'GT', 'G2', 'QTu', 'QTd', 'QTs', 'I3u', 'I3d', 'I3s', 'I3T', 'I4', 'I5']
+
+		for amp in amps:
+			ic_params[amp] = {}
+			for basis in ['eta','s10','1']:
+				if amp in ['Qu', 'Qd', 'Qs', 'GT', 'G2', 'QTu', 'QTd', 'QTs']:
+
+					if self.corrected_evo:
+
+						if amp == 'GT':
+							if basis == 'eta':
+								ic_params[amp][basis] = -(0.5/self.Nc)*(sdf['Queta'].iloc[0] + sdf['Qus10'].iloc[0])
+								ic_params[amp][basis] += -(0.5/self.Nc)*(sdf['Qdeta'].iloc[0] + sdf['Qds10'].iloc[0])
+								ic_params[amp][basis] += -(0.5/self.Nc)*(sdf['Qseta'].iloc[0] + sdf['Qss10'].iloc[0])
+								ic_params[amp][basis] -= sdf['GTs10'].iloc[0]
+
+							elif basis == '1':
+								ic_params[amp][basis] = -(0.5/self.Nc)*(sdf['Qu1'].iloc[0] + sdf['Qd1'].iloc[0] + sdf['Qs1'].iloc[0])
+
+							else:
+								ic_params[amp][basis] = sdf[f'{amp}{basis}'].iloc[0]
+
+
+						elif amp == 'QTu':
+							if basis == 'eta':
+								ic_params[amp][basis] = -2*(sdf['Queta'].iloc[0] + sdf['Qus10'].iloc[0]) - sdf['QTus10'].iloc[0]
+							elif basis == '1':
+								ic_params[amp][basis] = -2*sdf['Qu1'].iloc[0]
+							else:
+								ic_params[amp][basis] = sdf[f'{amp}{basis}'].iloc[0]
+
+						elif amp == 'QTd':
+							if basis == 'eta':
+								ic_params[amp][basis] = -2*(sdf['Qdeta'].iloc[0] + sdf['Qds10'].iloc[0]) - sdf['QTds10'].iloc[0]
+							elif basis == '1':
+								ic_params[amp][basis] = -2*sdf['Qd1'].iloc[0]
+							else:
+								ic_params[amp][basis] = sdf[f'{amp}{basis}'].iloc[0]
+
+						elif amp == 'QTs':
+							if basis == 'eta':
+								ic_params[amp][basis] = -2*(sdf['Qseta'].iloc[0] + sdf['Qss10'].iloc[0]) - sdf['QTss10'].iloc[0]
+							elif basis == '1':
+								ic_params[amp][basis] = -2*sdf['Qs1'].iloc[0]
+							else:
+								ic_params[amp][basis] = sdf[f'{amp}{basis}'].iloc[0]
+
+						else: 
+							ic_params[amp][basis] = sdf[f'{amp}{basis}'].iloc[0]
+
+					else:
+						ic_params[amp][basis] = sdf[f'{amp}{basis}'].iloc[0]
+				else: 
+					if self.fix_moments: ic_params[amp][basis] = 1
+					else: ic_params[amp][basis] = smdf[f'{amp}{basis}'].iloc[0]
+
+
+		self.pdipoles = {}
+
+		bad_amps = ['GT', 'QTu', 'QTd', 'QTs', 'I3T', 'ITu', 'ITd', 'ITs']
+		if self.corrected_evo: 
+			bad_amps = ['GT', 'I3T', 'ITu', 'ITd', 'ITs']
+
+		for iamp in amps:
+			if iamp in bad_amps: continue
+
+			input_dipole = 0
+			for j, jamp in enumerate(amps):
+				for jbasis in ['eta', 's10','1']:
+					temp_dipole = self.basis_dipoles[iamp][jamp][jbasis]
+					input_dipole += ic_params[jamp][jbasis]*temp_dipole
+
+			self.pdipoles[iamp] = input_dipole
+
+
+	def set_temp_params(self, mom_params, nreplica=1):
+
+		sdf = self.params[self.params['nrep'] == nreplica]
+		assert len(sdf) == 1, 'Error: more than 1 replica selected...'
+		print('loaded replica', nreplica)
+
+		ic_params = {}
+
 		for amp in ['Qu', 'Qd', 'Qs', 'GT', 'G2', 'I3u', 'I3d', 'I3s', 'I3T', 'I4', 'I5']:
 			ic_params[amp] = {}
 			for basis in ['eta','s10','1']:
 				if amp in ['Qu', 'Qd', 'Qs', 'GT', 'G2']: ic_params[amp][basis] = sdf[f'{amp}{basis}'].iloc[0]
 				else: 
 					if self.fix_moments: ic_params[amp][basis] = 1
-					else: ic_params[amp][basis] = ic_params[amp][basis] = smdf[f'{amp}{basis}'].iloc[0]
+					else: ic_params[amp][basis] = mom_params[amp][basis]
 
 
 		self.pdipoles = {}
@@ -687,19 +798,32 @@ class DIJET:
 		return num/den
 
 
+	def get_dipole_value(self, i,j,amp):
+		return self.pdipoles[amp][i,j]
+
+	def save_dipole(self, amp, filename):
+		save(self.pdipoles[amp], filename)
+
+
+	def alpha_s(self, running, s0, s):
+		Nc=3.
+		Nf=3.
+		beta2 = (11*Nc-2*Nf)/(12*np.pi) 
+		if running==False: return 0.3
+		elif running==True: return (np.sqrt(Nc/(2*np.pi))/beta2)*(1/(s0+s))
+
 
 	# functions to calculate helicity objects below
+	def get_g1(self, x, Q2):
 
-	def get_g1(self, kvar):
-
-		g1 = 0.5*(self.Zusq*self.get_ppdfplus(kvar, 'u') + self.Zdsq*self.get_ppdfplus(kvar, 'd') + self.Zssq*self.get_ppdfplus(kvar, 's'))
+		g1 = 0.5*(self.Zusq*self.get_ppdfplus(x, Q2, 'u') + self.Zdsq*self.get_ppdfplus(x, Q2, 'd') + self.Zssq*self.get_ppdfplus(x, Q2, 's'))
 		return g1
 
 
 	# # daniel's version 
-	def get_ppdfplus(self, kvar, flavor):
+	def get_ppdfplus(self, x, Q2, flavor):
 		G = self.pdipoles[f'Q{flavor}'] + 2*self.pdipoles['G2']
-		x, Q2 = kvar.x, kvar.Q**2
+		# x, Q2 = kvar.x, kvar.Q**2
 
 		lam2smx = 1
 		Nc = 3.0
@@ -733,38 +857,33 @@ class DIJET:
 
 
 
-	def get_DeltaSigma(self,kvar): # returns \sum_f(delta q_f + delta qb_f)(x)
-		DelSigma = self.get_ppdfplus(kvar, 'u') + self.get_ppdfplus(kvar, 'd') + self.get_ppdfplus(kvar, 's')
-		return DelSigma
+	def get_DeltaSigma(self, x, Q2): # returns \sum_f(delta q_f + delta qb_f)(x)
+
+		if self.corrected_evo:
+			s10 = np.sqrt(self.Nc/(2*np.pi))*np.log(Q2/(self.lambdaIR**2))
+			s10_index = int(np.ceil(s10/self.deta))
+			eta_index = int(np.ceil(np.sqrt(self.Nc/(2*np.pi))*np.log(Q2/(x*(self.lambdaIR**2)))/self.deta))
+			Del_Sigma = (1/self.alpha_s(True, 0, s10))*((self.Nc)/(np.pi**2))*(self.pdipoles['QTu'][s10_index, eta_index] + self.pdipoles['QTd'][s10_index, eta_index] + self.pdipoles['QTs'][s10_index, eta_index])
+			return Del_Sigma
+
+		else:
+			Del_Sigma = self.get_ppdfplus(x, Q2, 'u') + self.get_ppdfplus(x, Q2, 'd') + self.get_ppdfplus(x, Q2, 's')
+			return Del_Sigma
 
 
-	def get_dipole_value(self, i,j,amp):
-		return self.pdipoles[amp][i,j]
 
-	def save_dipole(self, amp, filename):
-		save(self.pdipoles[amp], filename)
-
-
-	def alpha_s(self, running, s0, s):
-		Nc=3.
-		Nf=3.
-		beta2 = (11*Nc-2*Nf)/(12*np.pi) 
-		if running==False: return 0.3
-		elif running==True: return (np.sqrt(Nc/(2*np.pi))/beta2)*(1/(s0+s))
-
-
-	def get_DeltaG(self,kvar):
-		s10 = np.sqrt(3.0/(2*np.pi))*np.log((kvar.Q**2)/(self.lambdaIR**2))
+	def get_DeltaG(self, x, Q2):
+		s10 = np.sqrt(3.0/(2*np.pi))*np.log(Q2/(self.lambdaIR**2))
 		s10_index = int(np.ceil(s10/self.deta))
-		eta_index = int(np.ceil(np.sqrt(3.0/(2*np.pi))*np.log((kvar.Q**2)/(kvar.x*(self.lambdaIR**2)))/self.deta))
-		Del_G = (1/self.alpha_s(True, 0, s10))*((2*3.0)/(np.pi**2))*self.pdipoles['G2'][s10_index, eta_index]
+		eta_index = int(np.ceil(np.sqrt(3.0/(2*np.pi))*np.log(Q2/(x*(self.lambdaIR**2)))/self.deta))
+		Del_G = (1/self.alpha_s(True, 0, s10))*((2*self.Nc)/(np.pi**2))*self.pdipoles['G2'][s10_index, eta_index]
 		return Del_G
 
 
 	# returns Lq
-	def get_Lq(self, kvar, flavor):
+	def get_Lq(self, x, Q2, flavor):
 		G = self.pdipoles[f'Q{flavor}'] + 3*self.pdipoles['G2'] - self.pdipoles[f'I3{flavor}'] + 2*self.pdipoles['I4'] - self.pdipoles['I5']
-		x, Q2 = kvar.x, kvar.Q**2
+		# x, Q2 = kvar.x, kvar.Q**2
 
 		lam2smx = 1
 		Nc = 3.0
@@ -797,49 +916,65 @@ class DIJET:
 		return g1plus
 
 
-	def get_Lsinglet(self,kvar): # returns \sum_f(L_)(x)
-		Lsinglet = self.get_Lq(kvar, 'u') + self.get_Lq(kvar, 'd') + self.get_Lq(kvar, 's')
+	def get_Lsinglet(self, x, Q2): # returns \sum_f(L_)(x)
+		Lsinglet = self.get_Lq(x, Q2, 'u') + self.get_Lq(x, Q2, 'd') + self.get_Lq(x, Q2, 's')
 		return Lsinglet
 
 
-	def get_LG(self,kvar):
-		s10 = np.sqrt(3.0/(2*np.pi))*np.log((kvar.Q**2)/(self.lambdaIR**2))
+	def get_LG(self, x, Q2):
+		s10 = np.sqrt(3.0/(2*np.pi))*np.log(Q2/(self.lambdaIR**2))
 		s10_index = int(np.ceil(s10/self.deta))
-		eta_index = int(np.ceil(np.sqrt(3.0/(2*np.pi))*np.log((kvar.Q**2)/(kvar.x*(self.lambdaIR**2)))/self.deta))
+		eta_index = int(np.ceil(np.sqrt(3.0/(2*np.pi))*np.log(Q2/(x*(self.lambdaIR**2)))/self.deta))
 		L_G = -(1/self.alpha_s(True, 0, s10))*((2*3.0)/(np.pi**2))*(2*self.pdipoles['I4'][s10_index, eta_index] + 3*self.pdipoles['I5'][s10_index, eta_index])
 		return L_G
 
 
-	def get_IntegratedPDF(self, kvar, kind, xmin=10**(-5), xmax=0.1):
-		npoints = 40
-		x_values = np.logspace(np.log10(xmin), np.log10(xmax), npoints)
+	def get_IntegratedPDF(self, kind, Q2, xmin=10**(-5), xmax=0.1):
+		npoints = 10
 
-		integral = 0
-		for ix, x in enumerate(x_values):
-			# if ix == len(x_values) - 1: continue
-			if ix == 0: continue
+		if kind == 'Lq':
+			ifunc = lambda xm: fixed_quad(np.vectorize(lambda x: self.get_Lsinglet(x, Q2)), xmin, xm, n=npoints)[0]
+		elif kind == 'LG':
+			ifunc = lambda xm: fixed_quad(np.vectorize(lambda x: self.get_LG(x, Q2)), xmin, xm, n=npoints)[0]
+		elif kind == 'DeltaSigma':
+			ifunc = lambda xm: fixed_quad(np.vectorize(lambda x: self.get_DeltaSigma(x, Q2)), xmin, xm, n=npoints)[0]
+		elif kind == 'DeltaG':
+			ifunc = lambda xm: fixed_quad(np.vectorize(lambda x: self.get_DeltaG(x, Q2)), xmin, xm, n=npoints)[0]
+		elif kind == 'helicity':
+			ifunc = lambda xm: fixed_quad(np.vectorize(lambda x: 0.5*self.get_DeltaSigma(x, Q2) + self.get_DeltaG(x, Q2)), xmin, xm, n=npoints)[0]
+		elif kind == 'oam':
+			ifunc = lambda xm: fixed_quad(np.vectorize(lambda x: self.get_Lsinglet(x, Q2) + self.get_LG(x, Q2)), xmin, xm, n=npoints)[0]
 
-			kvar.x = x
-			# dx = np.abs(x_values[ix+1] - x)
-			dx = np.abs(x - x_values[ix-1])
+		return ifunc(xmax)
 
-			value = 0
-			if kind == 'Lq':
-				value = self.get_Lsinglet(kvar)
-			elif kind == 'LG':
-				value = self.get_Lsinglet(kvar)
-			elif kind == 'DeltaSigma':
-				value = self.get_DeltaSigma(kvar)
-			elif kind == 'DeltaG':
-				value = self.get_DeltaG(kvar)
-			elif kind == 'helicity':
-				value = self.get_DeltaG(kvar) + 0.5*self.get_DeltaSigma(kvar)
-			elif kind == 'oam':
-				value = self.get_Lsinglet(kvar) + self.get_LG(kvar)
 
-			integral += dx*value
+		# x_values = np.logspace(np.log10(xmin), np.log10(xmax), npoints)
+		# integral = 0
+		# for ix, x in enumerate(x_values):
+		# 	# if ix == len(x_values) - 1: continue
+		# 	if ix == 0: continue
 
-		return integral
+		# 	kvar.x = x
+		# 	# dx = np.abs(x_values[ix+1] - x)
+		# 	dx = np.abs(x - x_values[ix-1])
+
+		# 	value = 0
+		# 	if kind == 'Lq':
+		# 		value = self.get_Lsinglet(kvar)
+		# 	elif kind == 'LG':
+		# 		value = self.get_Lsinglet(kvar)
+		# 	elif kind == 'DeltaSigma':
+		# 		value = self.get_DeltaSigma(kvar)
+		# 	elif kind == 'DeltaG':
+		# 		value = self.get_DeltaG(kvar)
+		# 	elif kind == 'helicity':
+		# 		value = self.get_DeltaG(kvar) + 0.5*self.get_DeltaSigma(kvar)
+		# 	elif kind == 'oam':
+		# 		value = self.get_Lsinglet(kvar) + self.get_LG(kvar)
+
+		# 	integral += dx*value
+
+		# return integral
 
 
 
