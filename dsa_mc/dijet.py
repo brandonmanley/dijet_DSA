@@ -10,7 +10,10 @@ import _pickle as cPickle
 import sys
 import zlib
 from dataclasses import dataclass
-from scipy.integrate import quad,fixed_quad
+from scipy.integrate import quad,fixed_quad, nquad
+
+import vegas
+from scipy.integrate import cubature
 
 
 def load(name): 
@@ -55,7 +58,7 @@ class Kinematics:
 
 
 class DIJET:
-	def __init__(self, nreplica=1, lambdaIR=0.3, deta=0.05, gauss_param=0.0, mv_only=False, fix_moments=False, old_rap=False, corrected_evo=False): 
+	def __init__(self, nreplica=1, lambdaIR=0.3, deta=0.05, gauss_param=0.0, mv_only=False, fix_moments=False, old_rap=False, corrected_evo=False, constrained_moments=False): 
 
 		# define physical constants
 		self.alpha_em = 1/137.0
@@ -83,6 +86,9 @@ class DIJET:
 
 		self.corrected_evo = corrected_evo
 		if corrected_evo: print('Using corrected evolution')
+
+		self.constrained_moments = constrained_moments
+		if constrained_moments: print('Using constrained moment parameters')
 
 		self.current_dir = os.path.dirname(os.path.abspath(__file__))
 
@@ -182,6 +188,8 @@ class DIJET:
 			mom_params_file = self.current_dir + '/dipoles/moment_params_dis.csv'
 		else:
 			mom_params_file = self.current_dir + '/dipoles/moment_params_pp.csv'
+
+		if not self.constrained_moments: mom_params_file = self.current_dir + '/dipoles/random_moment_params.csv'
 
 		self.mom_params = pd.read_csv(mom_params_file)
 
@@ -283,7 +291,7 @@ class DIJET:
 
 		sdf = self.params[self.params['nrep'] == nreplica]
 		assert len(sdf) == 1, 'Error: more than 1 replica selected...'
-		print('loaded replica', nreplica)
+		# print('loaded replica', nreplica)
 
 		ic_params = {}
 
@@ -292,7 +300,7 @@ class DIJET:
 			for basis in ['eta','s10','1']:
 				if amp in ['Qu', 'Qd', 'Qs', 'GT', 'G2']: ic_params[amp][basis] = sdf[f'{amp}{basis}'].iloc[0]
 				else: 
-					if self.fix_moments: ic_params[amp][basis] = 1
+					if self.fix_moments: ic_params[amp][basis] = 0
 					else: ic_params[amp][basis] = mom_params[amp][basis]
 
 
@@ -581,7 +589,7 @@ class DIJET:
 
 
 
-		# returns xsec in units of picobarns (pb) (differential in Q^2, x, p_T, z, t)
+	# returns xsec in units of picobarns (pb) (differential in Q^2, x, p_T, z, t)
 	def get_xsec_angle_integrated(self, kvar, kind, diff):
 
 		Q, x, y, z, pT, delta = kvar.Q, kvar.x, kvar.y, kvar.z, kvar.pT, kvar.delta
@@ -618,11 +626,6 @@ class DIJET:
 			xsec *= 0.3894*(10**9) # convert to pb
 
 			return xsec
-
-
-
-
-
 
 
 
@@ -769,9 +772,8 @@ class DIJET:
 
 
 
-
 	# returns correlations of asymmetry
-	def get_correlation(self, kvar, kind):
+	def get_correlation_numerator(self, kvar, kind):
 		# self.filter_dipole(kvar)
 
 		y, delta, pT = kvar.y, kvar.delta, kvar.pT
@@ -798,6 +800,97 @@ class DIJET:
 		return num/den
 
 
+	# returns correlation/dpT 
+	# def get_integrated_correlation(self, kind, pT, s, t_range, x_range, z_range, Q_range):
+
+	# 	def corr(x, Q, z, delta):
+	# 		y = (Q**2)/(s*x)
+	# 		ivar = Kinematics(x=x, Q=Q, z=z, delta=delta, pT=pT, s=s, y=y)
+	# 		return self.get_correlation(ivar, kind)
+
+	# 	def x_limits(Q, z, delta):
+	# 		return [max(x_range[0], (Q**2)/(ymax*s)), min(x_range[1], (Q**2)/(ymin*s))]
+
+	# 	ymin = 0.05
+	# 	ymax = 0.9
+
+	# 	limits = [
+	# 		x_limits,
+	# 		[Q_range[0], Q_range[1]], 
+	# 		[z_range[0], z_range[1]],	
+	# 		[np.sqrt(t_range)[0], np.sqrt(t_range)[1]]	# \Delta range
+	# 	]
+
+	# 	result, error = nquad(corr, limits)
+	# 	return result
+
+
+
+	def get_correlation_integrand(self, kvar, kind):
+		# self.filter_dipole(kvar)
+
+		y, pT = kvar.y, kvar.pT
+
+		if kind == '<1>': 
+			num = y*(2-y)*self.get_coeff('A_TT', kvar)
+
+		elif kind == '<cos(phi_Dp)>': 
+			num = 0.5*y*(2-y)*(1/pT)*self.get_coeff('B_TT', kvar)
+
+		elif kind == '<cos(phi_kp)>': 
+			num = 0.5*y*np.sqrt(2-2*y)*self.get_coeff('A_LT', kvar)
+
+		elif kind == '<cos(phi_Dp)cos(phi_kp)>':
+			num = 0.25*y*np.sqrt(2-2*y)*(1/pT)*self.get_coeff('B_LT', kvar)
+
+		elif kind == '<sin(phi_Dp)sin(phi_kp)>': 
+			num = 0.25*y*np.sqrt(2-2*y)*(1/pT)*self.get_coeff('C_LT', kvar)
+
+		else: 
+			raise ValueError(f'Error: Correlation {kind} not recognized')
+
+		den = (1 + (1-y)**2)*self.get_coeff('A_TT_unpolar', kvar) + 4*(1-y)*self.get_coeff('A_LL_unpolar', kvar)
+		return num/den
+
+
+
+	def get_integrated_correlation(self, kind, pT, s, t_range, y_range, z_range, Q2_range):
+
+		ivars = Kinematics(pT = pT, s = s)
+	
+		t_integral = (2.0/3.0)*(t_range[1]**(1.5) - t_range[0]**(1.5))
+
+		y_values = np.linspace(y_range[0], y_range[1], 40)
+		z_values = np.linspace(z_range[0], z_range[1], 40)
+		Q2_values = np.linspace(Q2_range[0], Q2_range[1], 40)
+
+		dy = (y_values[1] - y_values[0])
+		dz = (z_values[1] - z_values[0]) 
+		dQ2 = (Q2_values[1] - Q2_values[0])
+
+		result = 0
+		for y in y_values:
+			ivars.y = y
+			for Q2 in Q2_values:
+				ivars.Q = np.sqrt(Q2)
+				x = Q2/(s*y)
+				if x > 0.01: continue
+				ivars.x = x
+				# print(x)
+
+				for z in z_values:
+					if np.sqrt(Q2)*np.sqrt(z*(1-z)) < 2: continue
+					ivars.z = z
+					result += dy * dz * dQ2 * self.get_correlation_integrand(ivars, kind)
+
+		print(result, t_integral)
+
+		return result*t_integral
+
+
+
+
+
 	def get_dipole_value(self, i,j,amp):
 		return self.pdipoles[amp][i,j]
 
@@ -816,44 +909,65 @@ class DIJET:
 	# functions to calculate helicity objects below
 	def get_g1(self, x, Q2):
 
-		g1 = 0.5*(self.Zusq*self.get_ppdfplus(x, Q2, 'u') + self.Zdsq*self.get_ppdfplus(x, Q2, 'd') + self.Zssq*self.get_ppdfplus(x, Q2, 's'))
+		g1 = 0
+		for flav in ['u', 'd', 's']:
+
+			G = self.pdipoles[f'Q{flav}'] + 2*self.pdipoles['G2']
+
+			x0 = 1.0
+			eta0 = np.sqrt(self.Nc/(2*np.pi))*np.log(1/x0)
+			eta0index = int(np.ceil(eta0/self.deta))+1
+			eta = np.sqrt(self.Nc/(2*np.pi))*np.log(1/x)
+			jetai = int(np.ceil(np.sqrt(self.Nc/(2.*np.pi))*np.log(1./x)/self.deta))
+			jetaf = int(np.ceil(np.sqrt(self.Nc/(2.*np.pi))*np.log(Q2/(x*(self.lambdaIR**2)))/self.deta))
+
+			g1plus=0
+			for j in range(eta0index,jetai):
+				si = 0
+				sf = int(np.ceil(round((self.deta*(j)-eta0)/self.deta,6))) #1 + np.int(np.ceil((deta*(j-1)-eta0)/deta))
+				
+				for i in range(si,sf):
+					g1plus += self.deta*self.deta * G[i,j]
+
+			for j in range(jetai, jetaf):
+				si = int(np.ceil((self.deta*(j)-np.sqrt(self.Nc/(2*np.pi))*np.log(1./x))/self.deta))
+				sf = int(np.ceil(round((self.deta*(j)-eta0)/self.deta,6))) #1 + np.int(np.ceil((deta*(j-1)-eta0)/deta))
+				for i in range(si,sf): 
+					g1plus += self.deta*self.deta * G[i,j]
+
+			g1plus *= (-1./(np.pi**2))
+
+			if flav == 'u': g1 += self.Zusq*g1plus
+			if flav == 'd': g1 += self.Zdsq*g1plus
+			if flav == 's': g1 += self.Zssq*g1plus
+		
 		return g1
 
 
 	# # daniel's version 
 	def get_ppdfplus(self, x, Q2, flavor):
 		G = self.pdipoles[f'Q{flavor}'] + 2*self.pdipoles['G2']
-		# x, Q2 = kvar.x, kvar.Q**2
 
-		lam2smx = 1
-		Nc = 3.0
 		x0 = 1.0
-		eta0 = np.sqrt(Nc/(2*np.pi))*np.log(1/x0)
+		eta0 = np.sqrt(self.Nc/(2*np.pi))*np.log(1/x0)
 		eta0index = int(np.ceil(eta0/self.deta))+1
+		eta = np.sqrt(self.Nc/(2*np.pi))*np.log(1/x)
+		jetai = int(np.ceil(np.sqrt(self.Nc/(2.*np.pi))*np.log(1./x)/self.deta))
+		jetaf = int(np.ceil(np.sqrt(self.Nc/(2.*np.pi))*np.log(Q2/(x*(self.lambdaIR**2)))/self.deta))
 
-		eta = np.sqrt(Nc/(2*np.pi))*np.log(1/x)
+		qplus=0
+		si = 0
+		sf = int(np.ceil(np.sqrt(self.Nc/(2.*np.pi))*np.log(Q2/(self.lambdaIR**2))/self.deta))
+		for i in range(si, sf):
+			jetai = i + eta0index
+			jetaf = i + int(np.ceil(eta/self.deta))
 
-		jetai = int(np.ceil(np.sqrt(Nc/(2.*np.pi))*np.log(1./x)/self.deta))
-		jetaf = int(np.ceil(np.sqrt(Nc/(2.*np.pi))*np.log(Q2/(x*lam2smx))/self.deta))
+			for j in range(jetai, jetaf):
+				qplus += self.deta*self.deta * G[i,j]
 
-		g1plus=0
+		qplus *= (-1./(np.pi**2))
 		
-		for j in range(eta0index,jetai):
-			si = 0
-			sf = int(np.ceil(round((self.deta*(j)-eta0)/self.deta,6))) #1 + np.int(np.ceil((deta*(j-1)-eta0)/deta))
-			
-			for i in range(si,sf): 
-				g1plus = g1plus + self.deta*self.deta * G[i,j]
-
-		for j in range(jetai,jetaf):
-			si = int(np.ceil((self.deta*(j)-np.sqrt(Nc/(2*np.pi))*np.log(1./x))/self.deta))
-			sf = int(np.ceil(round((self.deta*(j)-eta0)/self.deta,6))) #1 + np.int(np.ceil((deta*(j-1)-eta0)/deta))
-			for i in range(si,sf): 
-				g1plus = g1plus + self.deta*self.deta * G[i,j]
-
-		g1plus = (-1./(np.pi**2)) * g1plus
-		
-		return g1plus
+		return qplus
 
 
 
@@ -873,9 +987,9 @@ class DIJET:
 
 
 	def get_DeltaG(self, x, Q2):
-		s10 = np.sqrt(3.0/(2*np.pi))*np.log(Q2/(self.lambdaIR**2))
+		s10 = np.sqrt(self.Nc/(2*np.pi))*np.log(Q2/(self.lambdaIR**2))
 		s10_index = int(np.ceil(s10/self.deta))
-		eta_index = int(np.ceil(np.sqrt(3.0/(2*np.pi))*np.log(Q2/(x*(self.lambdaIR**2)))/self.deta))
+		eta_index = int(np.ceil(np.sqrt(self.Nc/(2*np.pi))*np.log(Q2/(x*(self.lambdaIR**2)))/self.deta))
 		Del_G = (1/self.alpha_s(True, 0, s10))*((2*self.Nc)/(np.pi**2))*self.pdipoles['G2'][s10_index, eta_index]
 		return Del_G
 
@@ -883,37 +997,27 @@ class DIJET:
 	# returns Lq
 	def get_Lq(self, x, Q2, flavor):
 		G = self.pdipoles[f'Q{flavor}'] + 3*self.pdipoles['G2'] - self.pdipoles[f'I3{flavor}'] + 2*self.pdipoles['I4'] - self.pdipoles['I5']
-		# x, Q2 = kvar.x, kvar.Q**2
 
-		lam2smx = 1
-		Nc = 3.0
 		x0 = 1.0
-		eta0 = np.sqrt(Nc/(2*np.pi))*np.log(1/x0)
+		eta0 = np.sqrt(self.Nc/(2*np.pi))*np.log(1/x0)
 		eta0index = int(np.ceil(eta0/self.deta))+1
+		eta = np.sqrt(self.Nc/(2*np.pi))*np.log(1/x)
+		jetai = int(np.ceil(np.sqrt(self.Nc/(2.*np.pi))*np.log(1./x)/self.deta))
+		jetaf = int(np.ceil(np.sqrt(self.Nc/(2.*np.pi))*np.log(Q2/(x*(self.lambdaIR**2)))/self.deta))
 
-		eta = np.sqrt(Nc/(2*np.pi))*np.log(1/x)
+		Lq=0
+		si = 0
+		sf = int(np.ceil(np.sqrt(self.Nc/(2.*np.pi))*np.log(Q2/(self.lambdaIR**2))/self.deta))
+		for i in range(si, sf):
+			jetai = i + eta0index
+			jetaf = i + int(np.ceil(eta/self.deta))
 
-		jetai = int(np.ceil(np.sqrt(Nc/(2.*np.pi))*np.log(1./x)/self.deta))
-		jetaf = int(np.ceil(np.sqrt(Nc/(2.*np.pi))*np.log(Q2/(x*lam2smx))/self.deta))
+			for j in range(jetai, jetaf):
+				Lq += self.deta*self.deta * G[i,j]
 
-		g1plus=0
+		Lq *= (-1./(np.pi**2))
 		
-		for j in range(eta0index,jetai):
-			si = 0
-			sf = int(np.ceil(round((self.deta*(j)-eta0)/self.deta,6))) #1 + np.int(np.ceil((deta*(j-1)-eta0)/deta))
-			
-			for i in range(si,sf): 
-				g1plus = g1plus + self.deta*self.deta * G[i,j]
-
-		for j in range(jetai,jetaf):
-			si = int(np.ceil((self.deta*(j)-np.sqrt(Nc/(2*np.pi))*np.log(1./x))/self.deta))
-			sf = int(np.ceil(round((self.deta*(j)-eta0)/self.deta,6))) #1 + np.int(np.ceil((deta*(j-1)-eta0)/deta))
-			for i in range(si,sf): 
-				g1plus = g1plus + self.deta*self.deta * G[i,j]
-
-		g1plus = (1./(np.pi**2)) * g1plus
-		
-		return g1plus
+		return Lq
 
 
 	def get_Lsinglet(self, x, Q2): # returns \sum_f(L_)(x)
@@ -922,10 +1026,10 @@ class DIJET:
 
 
 	def get_LG(self, x, Q2):
-		s10 = np.sqrt(3.0/(2*np.pi))*np.log(Q2/(self.lambdaIR**2))
+		s10 = np.sqrt(self.Nc/(2*np.pi))*np.log(Q2/(self.lambdaIR**2))
 		s10_index = int(np.ceil(s10/self.deta))
-		eta_index = int(np.ceil(np.sqrt(3.0/(2*np.pi))*np.log(Q2/(x*(self.lambdaIR**2)))/self.deta))
-		L_G = -(1/self.alpha_s(True, 0, s10))*((2*3.0)/(np.pi**2))*(2*self.pdipoles['I4'][s10_index, eta_index] + 3*self.pdipoles['I5'][s10_index, eta_index])
+		eta_index = int(np.ceil(np.sqrt(self.Nc/(2*np.pi))*np.log(Q2/(x*(self.lambdaIR**2)))/self.deta))
+		L_G = -(1/self.alpha_s(True, 0, s10))*((2*self.Nc)/(np.pi**2))*(2*self.pdipoles['I4'][s10_index, eta_index] + 3*self.pdipoles['I5'][s10_index, eta_index])
 		return L_G
 
 
@@ -944,41 +1048,10 @@ class DIJET:
 			ifunc = lambda xm: fixed_quad(np.vectorize(lambda x: 0.5*self.get_DeltaSigma(x, Q2) + self.get_DeltaG(x, Q2)), xmin, xm, n=npoints)[0]
 		elif kind == 'oam':
 			ifunc = lambda xm: fixed_quad(np.vectorize(lambda x: self.get_Lsinglet(x, Q2) + self.get_LG(x, Q2)), xmin, xm, n=npoints)[0]
+		else:
+			raise ValueError(f'dont know {kind}')
 
 		return ifunc(xmax)
-
-
-		# x_values = np.logspace(np.log10(xmin), np.log10(xmax), npoints)
-		# integral = 0
-		# for ix, x in enumerate(x_values):
-		# 	# if ix == len(x_values) - 1: continue
-		# 	if ix == 0: continue
-
-		# 	kvar.x = x
-		# 	# dx = np.abs(x_values[ix+1] - x)
-		# 	dx = np.abs(x - x_values[ix-1])
-
-		# 	value = 0
-		# 	if kind == 'Lq':
-		# 		value = self.get_Lsinglet(kvar)
-		# 	elif kind == 'LG':
-		# 		value = self.get_Lsinglet(kvar)
-		# 	elif kind == 'DeltaSigma':
-		# 		value = self.get_DeltaSigma(kvar)
-		# 	elif kind == 'DeltaG':
-		# 		value = self.get_DeltaG(kvar)
-		# 	elif kind == 'helicity':
-		# 		value = self.get_DeltaG(kvar) + 0.5*self.get_DeltaSigma(kvar)
-		# 	elif kind == 'oam':
-		# 		value = self.get_Lsinglet(kvar) + self.get_LG(kvar)
-
-		# 	integral += dx*value
-
-		# return integral
-
-
-
-
 
 
 
@@ -1003,14 +1076,16 @@ if __name__ == '__main__':
 	print('Total', dj.get_xsec(tkvar, 'unpolarized','dx'))
 	print('Total', dj.get_xsec(tkvar, 'unpolarized_integrated', 'dx'))
 
-	print(dj.get_IntegratedPDF(tkvar, 'DeltaSigma'))
+	print(dj.get_IntegratedPDF('DeltaSigma', 10))
 
 
-	t_range = [0, 0.5]
-	x_range = [6*(10**(-5)), 0.01]
+	t_range = [0.01, 0.04]
+	y_range = [0.05, 0.95]
 	pT_range = [5, 15] 
-	z_range = [0.3, 0.7]
-	Q_range = [5, 10]
+	z_range = [0.2, 0.4]
+	Q2_range = [16, 100]
+
+	print(dj.get_integrated_correlation('<cos(phi_Dp)>', 1, 95**2, t_range, y_range, z_range, Q2_range))
 
 	# print(dj.dxsec_dQ2(8, 320**2, x_range, z_range, pT_range, t_range))
 	# print(dj.dxsec_dpT(5, 320**2, x_range, z_range, Q_range, t_range))

@@ -37,9 +37,9 @@ if __name__ == '__main__':
 	for ivar, irange in ranges.items():
 		print(ivar, irange)
 
-	dj = dijet.DIJET(nreplica=1)
+	dj = dijet.DIJET(nreplica=1, constrained_moments=True)
 	dj.load_params('replica_params_pp.csv')
-	dj.set_params(34)
+	dj.set_params(3)
 
 	data = []
 	rng = np.random.default_rng(seed=int(time.time()))
