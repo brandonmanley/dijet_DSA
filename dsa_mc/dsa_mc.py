@@ -22,14 +22,10 @@ if __name__ == '__main__':
 
 	# basic acceptance-rejection method of generating a finite sample
 	ranges = {
-			# 'Q': [np.sqrt(5), 20],
 			'Q': [4, 10],
 			'rapidity': [4.62, 9.20],
 			'delta': [0.1, 0.2],
 			'pT': [0, 15],
-			'phi_kp': [0, 2*np.pi],
-			'phi_Dp': [0, 2*np.pi],
-			'log_xsec': [-1, 4],
 			'z': [0.1, 0.9]
 			}
 
@@ -55,8 +51,6 @@ if __name__ == '__main__':
 		ran_pT = rng.uniform(low=ranges['pT'][0], high=ranges['pT'][1])
 		ran_z = rng.uniform(low=ranges['z'][0], high=ranges['z'][1])
 		ran_y = (ran_Q**2)/(ran_x*fixed_s)
-		ran_phi_kp = rng.uniform(low=ranges['phi_kp'][0], high=ranges['phi_kp'][1])
-		ran_phi_Dp = rng.uniform(low=ranges['phi_Dp'][0], high=ranges['phi_Dp'][1])
 
 		# physical constraints ###############################
 		if ran_y > 1: continue
@@ -64,30 +58,31 @@ if __name__ == '__main__':
 		if ran_Q*np.sqrt(ran_z*(1-ran_z)) < 2: continue
 		######################################################
 
+		ran_kinematic_vars = dijet.Kinematics(s=fixed_s, Q= ran_Q, x= ran_x, delta= ran_delta, pT= ran_pT, z= ran_z, y= ran_y)
 
-		ran_kinematic_vars = dijet.Kinematics(s=fixed_s, Q= ran_Q, x= ran_x, delta= ran_delta, pT= ran_pT, z= ran_z, y= ran_y, phi_kp= ran_phi_kp, phi_Dp= ran_phi_Dp)
-		ran_dsa = dj.get_xsec(ran_kinematic_vars, 'DSA', 'dx')
-		ran_xsec = np.exp(rng.uniform(low=ranges['log_xsec'][0], high=ranges['log_xsec'][1]))
+		ran_numerator = dj.angle_integrated_numerator(ran_kinematic_vars)
+		ran_denominator = dj.angle_integrated_denominator(ran_kinematic_vars)
+		ran_value = rng.uniform(low=0, high=0.5)
 
-		# print(ran_dsa, ran_xsec)
+		if ran_value < np.abs(ran_numerator/ran_denominator):
 
-		if ran_xsec < np.abs(ran_dsa):
-
-			ran_unpolar = dj.get_xsec(ran_kinematic_vars, 'unpolarized_integrated', 'dx')
 			ran_corrs = [
-				dj.get_correlation(ran_kinematic_vars, '<1>'),
-				dj.get_correlation(ran_kinematic_vars, '<cos(phi_kp)>'),
-				dj.get_correlation(ran_kinematic_vars, '<cos(phi_Dp)>'),
-				dj.get_correlation(ran_kinematic_vars, '<cos(phi_Dp)cos(phi_kp)>'),
-				dj.get_correlation(ran_kinematic_vars, '<sin(phi_Dp)sin(phi_kp)>')
+				dj.angle_integrated_numerator(ran_kinematic_vars, weight='cos(phi_kp)'),
+				dj.angle_integrated_numerator(ran_kinematic_vars, weight='cos(phi_Dp)'),
+				dj.angle_integrated_numerator(ran_kinematic_vars, weight='cos(phi_Dp)cos(phi_kp)'),
+				dj.angle_integrated_numerator(ran_kinematic_vars, weight='sin(phi_Dp)sin(phi_kp)')
 			]
 
+			kinematics_list = [ran_kinematic_vars.s, ran_kinematic_vars.Q]
+			kinematics_list += [ran_kinematic_vars.x, ran_kinematic_vars.delta] 
+			kinematics_list += [ran_kinematic_vars.pT, ran_kinematic_vars.z, ran_kinematic_vars.y]
 
+			data.append(kinematics_list + [ran_denominator, ran_numerator] + ran_corrs)
+
+			# print progress
 			if count == 0:
 				sys.stdout.write(f'\r[{int((count*100/sample_size))}%] done ({count}/{sample_size})')
 				sys.stdout.flush()
-
-			data.append(list(asdict(ran_kinematic_vars).values()) + [ran_dsa, ran_unpolar] + ran_corrs)
 			count += 1
 			if np.mod((count/sample_size)*100, 1) == 0:
 				sys.stdout.write(f'\r[{(count*100/sample_size)}%] done ({count}/{sample_size})')
