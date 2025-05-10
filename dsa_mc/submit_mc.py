@@ -20,7 +20,7 @@ if not os.path.exists(output_dir):
 for i in range(num_submissions):
 
 	arguments = f"{sample_size} {output_dir}/data/mc_data_{i}.npy {root_s}"
-	command = f"nohup python dsa_mc.py {arguments} > {output_dir}/logs/output_{i}.log 2>&1 &"
+	command = f"nohup python dsa_mc2.py {arguments} > {output_dir}/logs/output_{i}.log 2>&1 &"
 	print(f"Submitting: {command}")
 	
 	process = subprocess.Popen(command, shell=True)

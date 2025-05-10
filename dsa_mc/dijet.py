@@ -14,6 +14,9 @@ from scipy.integrate import quad,fixed_quad, nquad
 
 import vegas
 from scipy.integrate import cubature
+from numpy.polynomial.legendre import leggauss
+from numpy.polynomial.laguerre import laggauss
+from scipy.special import roots_jacobi
 
 
 def load(name): 
@@ -131,7 +134,9 @@ class DIJET:
 		#--load unpolarized dipole amplitude
 		# mv parameters from 0902.1112
 		# unpolar_input_file = self.current_dir + '/dipoles/narr_ymin4.61_ymax9.81_AAMS09.dat'
-		unpolar_input_file = self.current_dir + '/dipoles/narr_ymin4.61_ymax14.91_AAMS09.dat'
+
+		unpolar_file = 'narr_ymin4.61_ymax14.91_AAMS09.dat'
+		unpolar_input_file = self.current_dir + '/dipoles/' + unpolar_file
 		self.normN = 0.5*32.77*(1/0.3894)  # value of b integral in mb (converted to GeV^-2)
 
 		# mv parameters from 2311.10491 (NOT SUPPORTED YET)
@@ -144,7 +149,7 @@ class DIJET:
 
 		self.ndipole = np.loadtxt(unpolar_input_file)
 
-		print('loaded N(r^2, s) data from', unpolar_input_file)
+		print('loaded N(r^2, s) data from', unpolar_file)
 		print('loaded polarized amp data from', polar_indir)
 
 		# grid values for dipoles
@@ -185,13 +190,13 @@ class DIJET:
 
 		# load moment parameters (random)
 		if 'dis' in params_file:
-			mom_params_file = self.current_dir + '/dipoles/moment_params_dis.csv'
+			mom_params_file = '/dipoles/moment_params_dis.csv'
 		else:
-			mom_params_file = self.current_dir + '/dipoles/moment_params_pp.csv'
+			mom_params_file = '/dipoles/moment_params_pp.csv'
 
-		if not self.constrained_moments: mom_params_file = self.current_dir + '/dipoles/random_moment_params.csv'
+		if not self.constrained_moments: mom_params_file = '/dipoles/random_moment_params.csv'
 
-		self.mom_params = pd.read_csv(mom_params_file)
+		self.mom_params = pd.read_csv(self.current_dir + mom_params_file)
 
 		print('loaded params from', params_file)
 		print('loaded random moment params from', mom_params_file)
@@ -777,7 +782,7 @@ class DIJET:
 
 
 	# returns numerator of asymmetry in pb or fb integrated over phase space except for pT (differential in p_T)
-	def integrated_numerator(self, pT, s, weight='1'):
+	def integrated_numerator(self, pT, s, weight='1', points=50):
 
 		kinematics = Kinematics(pT = pT, s = s)
 	
@@ -786,19 +791,23 @@ class DIJET:
 		Q2_range = [16, 100]
 		t_range = [0.01, 0.04]
 
-		npoints = 15
+		npoints = points
 		y_values = np.linspace(y_range[0], y_range[1], npoints)
 		z_values = np.linspace(z_range[0], z_range[1], npoints)
-		Q2_values = np.linspace(Q2_range[0], Q2_range[1], npoints)
+
+		Q2_max_values = 0.01 * s * y_values
+		Q2_grids = [np.linspace(Q2_range[0], Q2_max, npoints) for Q2_max in Q2_max_values]
 
 		dy = (y_values[1] - y_values[0])
 		dz = (z_values[1] - z_values[0]) 
-		dQ2 = (Q2_values[1] - Q2_values[0])
 
 		result = 0
-		for y in y_values:
+		for iy, y in enumerate(y_values):
 			kinematics.y = y
-			for Q2 in Q2_values:
+			if Q2_grids[iy][-1] < Q2_max_values[iy]: continue
+
+			for Q2 in Q2_grids[iy]:
+				dQ2 = (Q2_grids[iy][1] - Q2_grids[iy][0])
 				kinematics.Q = np.sqrt(Q2)
 				x = Q2/(s*y)
 				if x > 0.01: continue
@@ -822,9 +831,8 @@ class DIJET:
 		return result*t_integral
 
 
-
 	# returns denominator of asymmetry in pb or fb integrated over phase space except for pT (differential in p_T)
-	def integrated_denominator(self, pT, s):
+	def integrated_denominator(self, pT, s, points=50):
 
 		kinematics = Kinematics(pT = pT, s = s)
 	
@@ -833,19 +841,23 @@ class DIJET:
 		Q2_range = [16, 100]
 		t_range = [0.01, 0.04]
 
-		npoints = 15
+		npoints = points
 		y_values = np.linspace(y_range[0], y_range[1], npoints)
 		z_values = np.linspace(z_range[0], z_range[1], npoints)
-		Q2_values = np.linspace(Q2_range[0], Q2_range[1], npoints)
+
+		Q2_max_values = 0.01 * s * y_values
+		Q2_grids = [np.linspace(Q2_range[0], Q2_max, npoints) for Q2_max in Q2_max_values]
 
 		dy = (y_values[1] - y_values[0])
 		dz = (z_values[1] - z_values[0]) 
-		dQ2 = (Q2_values[1] - Q2_values[0])
 
 		result = 0
-		for y in y_values:
+		for iy, y in enumerate(y_values):
 			kinematics.y = y
-			for Q2 in Q2_values:
+			if Q2_grids[iy][-1] < Q2_max_values[iy]: continue
+
+			for Q2 in Q2_grids[iy]:
+				dQ2 = (Q2_grids[iy][1] - Q2_grids[iy][0])
 				kinematics.Q = np.sqrt(Q2)
 				x = Q2/(s*y)
 				if x > 0.01: continue
@@ -854,6 +866,7 @@ class DIJET:
 				for z in z_values:
 					if np.sqrt(Q2)*np.sqrt(z*(1-z)) < 2: continue
 					kinematics.z = z
+					kinematics.delta = 1 	# doing t integral analytically so just set to 1 in expressions
 					result += dy * dz * dQ2 * self.angle_integrated_denominator(kinematics, diff='dy')
 
 		t_integral = t_range[1]-t_range[0]
@@ -864,11 +877,184 @@ class DIJET:
 
 
 
-	# returns double spin asymmetry integrated over phase space except for pT (differential in p_T)
-	def integrated_dsa(self, pT, s, weight='1'):
+	# returns denominator of asymmetry in pb or fb integrated over phase space except for pT (differential in p_T)
+	# def integrated_denominator(self, pT, s):
 
-		numerator = self.integrated_numerator(pT, s, weight=weight)
-		denominator = self.integrated_denominator(pT, s)
+	# 	kinematics = Kinematics(pT = pT, s = s)
+	
+	# 	y_range = [0.05, 0.95]
+	# 	z_range = [0.2, 0.4]
+	# 	Q2_range = [16, 100]
+	# 	t_range = [0.01, 0.04]
+
+	# 	npoints = 70
+	# 	y_values = np.linspace(y_range[0], y_range[1], npoints)
+	# 	z_values = np.linspace(z_range[0], z_range[1], npoints)
+	# 	Q2_values = np.linspace(Q2_range[0], Q2_range[1], npoints)
+
+	# 	dy = (y_values[1] - y_values[0])
+	# 	dz = (z_values[1] - z_values[0]) 
+	# 	dQ2 = (Q2_values[1] - Q2_values[0])
+
+	# 	result = 0
+	# 	for y in y_values:
+	# 		kinematics.y = y
+	# 		for Q2 in Q2_values:
+	# 			kinematics.Q = np.sqrt(Q2)
+	# 			x = Q2/(s*y)
+	# 			if x > 0.01: continue
+	# 			kinematics.x = x
+
+	# 			for z in z_values:
+	# 				if np.sqrt(Q2)*np.sqrt(z*(1-z)) < 2: continue
+	# 				kinematics.z = z
+	# 				result += dy * dz * dQ2 * self.angle_integrated_denominator(kinematics, diff='dy')
+
+	# 	t_integral = t_range[1]-t_range[0]
+
+	# 	# print(result, t_integral)
+
+	# 	return result*t_integral
+
+
+
+	# returns double spin asymmetry integrated over phase space except for pT (differential in p_T)
+	def integrated_dsa(self, pT, s, weight='1', points=30):
+
+		numerator = self.integrated_numerator(pT, s, weight=weight, points=points)
+		denominator = self.integrated_denominator(pT, s, points=points)
+
+		return numerator/denominator
+
+
+
+
+	def integrated_numerator_approx(self, pT, s, weight='1', points=10):
+
+		kinematics = Kinematics(pT=pT, s=s)
+
+		y_range = [0.05, 0.95]
+		z_range = [0.2, 0.4]
+		Q2_min_fixed = 16
+		t_range = [0.01, 0.04]
+
+		N = points  # number of Gauss points
+
+		# Get Gauss–Legendre points and weights on [-1,1]
+		y_nodes, y_weights = leggauss(N)
+		z_nodes, z_weights = leggauss(N)
+		Q2_nodes, Q2_weights = leggauss(N)
+
+		# Map to [a, b]
+		def map_to_interval(nodes, weights, a, b):
+			mapped_nodes = 0.5 * (b + a) + 0.5 * (b - a) * nodes
+			mapped_weights = 0.5 * (b - a) * weights
+			return mapped_nodes, mapped_weights
+
+		# Map y and z to physical ranges
+		y_values, y_w = map_to_interval(y_nodes, y_weights, *y_range)
+		z_values, z_w = map_to_interval(z_nodes, z_weights, *z_range)
+
+		result = 0.0
+		for i, y in enumerate(y_values):
+			kinematics.y = y
+			Q2_max = 0.01 * s * y
+			if Q2_max < Q2_min_fixed:
+				continue  # skip if small-x region is closed out
+
+			# Map Q² to [Q2_min_fixed, Q2_max(y)]
+			Q2_values, Q2_w = map_to_interval(Q2_nodes, Q2_weights, Q2_min_fixed, Q2_max)
+
+			for j, Q2 in enumerate(Q2_values):
+				kinematics.Q = np.sqrt(Q2)
+				x = Q2 / (s * y)
+				kinematics.x = x
+
+				for k, z in enumerate(z_values):
+					if np.sqrt(Q2) * np.sqrt(z * (1 - z)) < 2:
+						continue  # skip low-mass region
+					kinematics.z = z
+					kinematics.delta = 1  # doing t integral analytically
+
+					weight_factor = y_w[i] * Q2_w[j] * z_w[k]
+					result += weight_factor * self.angle_integrated_numerator(
+						kinematics, weight=weight, diff='dy'
+					)
+
+		# Analytical t-integral factor
+		if weight in ['cos(phi_Dp)', 'cos(phi_Dp)cos(phi_kp)', 'cos(phi_kp)cos(phi_Dp)',
+					  'sin(phi_Dp)sin(phi_kp)', 'sin(phi_kp)sin(phi_Dp)']:
+			t_integral = (2.0 / 3.0) * (t_range[1] ** 1.5 - t_range[0] ** 1.5)
+		elif weight in ['1', 'cos(phi_kp)']:
+			t_integral = t_range[1] - t_range[0]
+
+		return result * t_integral
+
+
+
+
+	def integrated_denominator_approx(self, pT, s, points=10):
+
+		kinematics = Kinematics(pT=pT, s=s)
+
+		y_range = [0.05, 0.95]
+		z_range = [0.2, 0.4]
+		Q2_min_fixed = 16
+		t_range = [0.01, 0.04]
+
+		N = points  # number of Gauss points
+
+		# Get Gauss–Legendre points and weights on [-1,1]
+		y_nodes, y_weights = leggauss(N)
+		z_nodes, z_weights = leggauss(N)
+		Q2_nodes, Q2_weights = leggauss(N)
+
+		# Map to [a, b]
+		def map_to_interval(nodes, weights, a, b):
+			mapped_nodes = 0.5 * (b + a) + 0.5 * (b - a) * nodes
+			mapped_weights = 0.5 * (b - a) * weights
+			return mapped_nodes, mapped_weights
+
+		# Map y and z to physical ranges
+		y_values, y_w = map_to_interval(y_nodes, y_weights, *y_range)
+		z_values, z_w = map_to_interval(z_nodes, z_weights, *z_range)
+
+		result = 0.0
+		for i, y in enumerate(y_values):
+			kinematics.y = y
+			Q2_max = 0.01 * s * y
+			if Q2_max < Q2_min_fixed:
+				continue  # skip if small-x region is closed out
+
+			# Map Q2 to [Q2_min_fixed, Q2_max(y)]
+			Q2_values, Q2_w = map_to_interval(Q2_nodes, Q2_weights, Q2_min_fixed, Q2_max)
+
+			for j, Q2 in enumerate(Q2_values):
+				kinematics.Q = np.sqrt(Q2)
+				x = Q2 / (s * y)
+				kinematics.x = x
+
+				for k, z in enumerate(z_values):
+					if np.sqrt(Q2) * np.sqrt(z * (1 - z)) < 2:
+						continue  # skip low-mass region
+					kinematics.z = z
+					kinematics.delta = 1  # doing t integral analytically
+
+					weight_factor = y_w[i] * Q2_w[j] * z_w[k]
+					result += weight_factor * self.angle_integrated_denominator(kinematics, diff='dy')
+
+		# Analytical t-integral factor
+		t_integral = t_range[1] - t_range[0]
+
+		return result * t_integral
+
+
+
+	# returns double spin asymmetry integrated over phase space except for pT (differential in p_T)
+	def integrated_dsa_approx(self, pT, s, weight='1', points=10):
+
+		numerator = self.integrated_numerator_approx(pT, s, weight=weight, points=points)
+		denominator = self.integrated_denominator_approx(pT, s, points=points)
 
 		return numerator/denominator
 
@@ -1311,7 +1497,7 @@ if __name__ == '__main__':
 	test_kins.delta = 0.2
 	test_kins.phi_Dp = 0
 	test_kins.phi_kp = 0
-	test_kins.pT = 1.0
+	test_kins.pT = 2.0
 	test_kins.y = (test_kins.Q**2)/(test_kins.s*test_kins.x)
 
 	print(test_kins.y)
@@ -1320,22 +1506,74 @@ if __name__ == '__main__':
 
 
 	# testing dsa functions
-	print('numerator', dj.numerator(test_kins))
-	print('denominator', dj.denominator(test_kins))
-	print('angle integrated numerator', dj.angle_integrated_numerator(test_kins))
-	print('angle integrated denominator',  dj.angle_integrated_denominator(test_kins))
-	print('dsa', dj.dsa(test_kins))
+	# print('numerator', dj.numerator(test_kins))
+	# print('denominator', dj.denominator(test_kins))
+	# print('angle integrated numerator', dj.angle_integrated_numerator(test_kins))
+	# print('angle integrated denominator',  dj.angle_integrated_denominator(test_kins))
+	# print('dsa', dj.dsa(test_kins))
 
 	import time
 
+	# start = time.time()
+	# for pT in range(1, 15):
+	# 	print(pT)
+	# 	num = dj.integrated_numerator(pT, test_kins.s, weight='1')
+	# 	den = dj.integrated_denominator(pT, test_kins.s)
+	# 	dsa = dj.integrated_dsa(pT, test_kins.s, weight='1')
+
+	# 	error = np.sqrt(den/10)
+
+	# 	print('num', num)
+	# 	print('den', den)
+	# 	print('dsa', dsa)
+	# 	print('error', error)
+	# 	print('dsa error', np.sqrt((1+dsa)/(den*10)))
+		# print('num', num)
+
+	# start = time.time()
+	# print('integrated num (10 points)', dj.integrated_dsa(test_kins.pT, test_kins.s, weight='cos(phi_Dp)', points=10))
+	# print('elasp. time: ', time.time() - start)
+
+
+	# start = time.time()
+	# print('integrated num (20 points)', dj.integrated_dsa(test_kins.pT, test_kins.s, weight='cos(phi_Dp)', points=20))
+	# print('elasp. time: ', time.time() - start)
+
+	# start = time.time()
+	# print('integrated num (40 points)', dj.integrated_dsa(test_kins.pT, test_kins.s, weight='cos(phi_Dp)', points=40))
+	# print('elasp. time: ', time.time() - start)
+
+
+	# start = time.time()
+	# print('integrated num (60 points)', dj.integrated_dsa(test_kins.pT, test_kins.s, weight='cos(phi_Dp)', points=60))
+	# print('elasp. time: ', time.time() - start)
+
+
 	start = time.time()
-	print('integrated dsa', dj.integrated_dsa(test_kins.pT, test_kins.s, weight='cos(phi_Dp)'))
+	print('integrated num (approx)', dj.integrated_dsa_approx(test_kins.pT, test_kins.s, weight='cos(phi_Dp)', points=4))
+	print('elasp. time: ', time.time() - start)
+
+	start = time.time()
+	print('integrated num (approx)', dj.integrated_dsa_approx(test_kins.pT, test_kins.s, weight='cos(phi_Dp)', points=5))
+	print('elasp. time: ', time.time() - start)
+
+	start = time.time()
+	print('integrated num (approx)', dj.integrated_dsa_approx(test_kins.pT, test_kins.s, weight='cos(phi_Dp)', points=6))
+	print('elasp. time: ', time.time() - start)
+
+	start = time.time()
+	print('integrated num (approx)', dj.integrated_dsa_approx(test_kins.pT, test_kins.s, weight='cos(phi_Dp)', points=8))
+	print('elasp. time: ', time.time() - start)
+
+
+	start = time.time()
+	print('integrated num (approx)', dj.integrated_dsa_approx(test_kins.pT, test_kins.s, weight='cos(phi_Dp)', points=20))
 	print('elasp. time: ', time.time() - start)
 
 
 
 	# testing helicity functions
-	print(dj.get_IntegratedPDF('DeltaSigma', 10))
+	# print(dj.get_IntegratedPDF('DeltaSigma', 10))
 
 
 	# t_range = [0.01, 0.04]
