@@ -29,11 +29,12 @@ if __name__ == '__main__':
 	print('== root s =', root_s, 'GeV')
 
 	ranges = {
-			'Q2': [16, 100],
-			'y': [0.05, 0.95],   # Y = ln(1/x)
-			'|t|': [0.01, 0.04],   # |t| = \Delta**2
-			'pT': [0, 15],
-			'z': [0.1, 0.9]
+			'Q2': [0, 100],
+			'y': [0.05, 0.95],   
+			'|t|': [0.01, 0.07],   # |t| = \Delta**2
+			'pT': [0, 10],
+			# 'z': [0.2, 0.8]
+			'z': [0.2, 0.5]
 			}
 
 	print('== parameter ranges:')
@@ -54,27 +55,29 @@ if __name__ == '__main__':
 
 		rp = get_random_point(rng, ranges)
 
+		# rp['pT'] = 1.0
+
 		# physical constraints ###############################
 		rp['x'] = rp['Q2']/(fixed_s*rp['y'])
 		rp['delta'] = np.sqrt(rp['|t|'])
 
-		if rp['x'] > 0.01: continue					  	# small x limit
-		if rp['delta']/rp['pT'] > 0.25: continue	  	# correlation limit
-		if rp['Q2']*rp['z']*(1-rp['z']) < 4: continue 	# no oscillations
+		if rp['x'] > 0.01: continue					  			# small x limit
+		if rp['delta']/rp['pT'] > 0.25: continue	  			# correlation limit
+		if rp['Q2']*rp['z']*(1-rp['z']) < (2**2): continue 		# no oscillations
 		######################################################
 
 		ran_kins = dijet.Kinematics(
 			s=fixed_s, Q=np.sqrt(rp['Q2']), x=rp['x'], delta=rp['delta'], pT=rp['pT'], z=rp['z'], y=rp['y']
-			)
+		)
 
 		# compute numerator and denominator of asymmetry (and harmonics)
 		ran_funcs = [
-			dj.angle_integrated_numerator(ran_kins),
-			dj.angle_integrated_numerator(ran_kins, weight='cos(phi_kp)'),
-			dj.angle_integrated_numerator(ran_kins, weight='cos(phi_Dp)'),
-			dj.angle_integrated_numerator(ran_kins, weight='cos(phi_Dp)cos(phi_kp)'),
-			dj.angle_integrated_numerator(ran_kins, weight='sin(phi_Dp)sin(phi_kp)'),
-			dj.angle_integrated_denominator(ran_kins)
+			dj.angle_integrated_numerator(ran_kins, diff='dy'),
+			dj.angle_integrated_numerator(ran_kins, weight='cos(phi_kp)', diff='dy'),
+			dj.angle_integrated_numerator(ran_kins, weight='cos(phi_Dp)', diff='dy'),
+			dj.angle_integrated_numerator(ran_kins, weight='cos(phi_Dp)cos(phi_kp)', diff='dy'),
+			dj.angle_integrated_numerator(ran_kins, weight='sin(phi_Dp)sin(phi_kp)', diff='dy'),
+			dj.angle_integrated_denominator(ran_kins, diff='dy')
 		]
 
 		ran_funcs.append(ran_funcs[0]/ran_funcs[5])
