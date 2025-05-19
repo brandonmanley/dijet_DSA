@@ -642,7 +642,7 @@ class DIJET:
 
 
 	# returns denominator of asymmetry in pb or fb integrated over azimuthal angles (differential in Q^2, x (or y), p_T, z, t)
-	def angle_integrated_denominator(self, kinematics, diff='dx'):
+	def angle_integrated_denominator(self, kinematics, weight='1', diff='dx'):
 
 		Q, x, y, z, pT, delta = kinematics.Q, kinematics.x, kinematics.y, kinematics.z, kinematics.pT, kinematics.delta
 
@@ -655,37 +655,41 @@ class DIJET:
 			raise ValueError('diff should be dx or dy')
 
 
-		# if weight == '1':
-		# 	tt_term = (2-y) * self.get_coeff('A_TT', kinematics)
-		# 	lt_term = 0
-		# 	numerator_prefactor *= 8*(np.pi**3)
+		if weight == '1':
+			tt_term =  (1 + (1-y)**2) * self.get_coeff('A_TT_unpolar', kinematics)
+			tmt_term = 0
+			ll_term = 4*(1-y)* self.get_coeff('A_LL_unpolar', kinematics) 
+			denominator_prefactor *= 8*(np.pi**3)
 
-		# elif weight == 'cos(phi_Dp)':
-		# 	tt_term = (2-y) * (delta/pT) * self.get_coeff('B_TT', kinematics)
-		# 	lt_term = 0
-		# 	numerator_prefactor *= 4*(np.pi**3)
+		elif weight == 'cos(phi_Dp)':
+			tt_term = (1 + (1-y)**2) * (delta/pT) * self.get_coeff('B_TT_unpolar', kinematics)
+			tmt_term = 0
+			ll_term = 4*(1-y)* (delta/pT)* self.get_coeff('B_LL_unpolar', kinematics)
+			denominator_prefactor *= 4*(np.pi**3)
 
-		# elif weight == 'cos(phi_Dp)cos(phi_kp)' or weight == 'cos(phi_kp)cos(phi_Dp)':
-		# 	tt_term = 0
-		# 	lt_term = np.sqrt(2-2*y) * (delta/pT) * self.get_coeff('B_LT', kinematics) 
-		# 	numerator_prefactor *= 2*(np.pi**3)
+		elif weight == 'cos(2*phi_kp)':
+			tt_term = 0
+			tmt_term = -2*(1-y) * self.get_coeff('A_TmT_unpolar', kinematics) 
+			ll_term = 0
+			denominator_prefactor *= 4*(np.pi**3)
 
-		# elif weight == 'sin(phi_Dp)sin(phi_kp)' or weight == 'sin(phi_kp)sin(phi_Dp)':
-		# 	tt_term = 0
-		# 	lt_term = np.sqrt(2-2*y) * (delta/pT) * self.get_coeff('C_LT', kinematics)
-		# 	numerator_prefactor *= 2*(np.pi**3)
+		elif weight == 'cos(phi_Dp)cos(2*phi_kp)' or weight == 'cos(2*phi_kp)cos(phi_Dp)':
+			tt_term = 0
+			tmt_term = -2*(1-y)* (delta/pT) * self.get_coeff('B_TmT_unpolar', kinematics) 
+			ll_term = 0
+			denominator_prefactor *= 2*(np.pi**3)
 
-		# elif weight == 'cos(phi_kp)':
-		# 	tt_term = 0
-		# 	lt_term = np.sqrt(2-2*y) * self.get_coeff('A_LT', kinematics) 
-		# 	numerator_prefactor *= 4*(np.pi**3)
+		elif weight == 'sin(phi_Dp)sin(2*phi_kp)' or weight == 'sin(2*phi_kp)sin(phi_Dp)':
+			tt_term = 0
+			tmt_term = -2*(1-y)* (delta/pT) * self.get_coeff('C_TmT_unpolar', kinematics) 
+			ll_term = 0
+			denominator_prefactor *= 2*(np.pi**3)
 
-		tt_term =  (1 + (1-y)**2) * self.get_coeff('A_TT_unpolar', kinematics)
-		ll_term = 4*(1-y)* self.get_coeff('A_LL_unpolar', kinematics) 
+		else:
+			raise ValueError(f'weight {weight} not recognized')
 
-		denominator_prefactor *= 8*(np.pi**3)
 
-		xsec = denominator_prefactor*(tt_term + ll_term)
+		xsec = denominator_prefactor*(tt_term + tmt_term + ll_term)
 		xsec *= 0.3894*(10**12) # convert to fb 
 		# xsec *= 0.3894*(10**9) # convert to pb
 
@@ -701,21 +705,22 @@ class DIJET:
 
 
 	# returns numerator of asymmetry in pb or fb integrated over phase space except for pT (differential in p_T)
-	def integrated_numerator(self, pT, s, weight='1', points=50):
+	def integrated_numerator(self, pT, s, phase_space, weight='1', points=50, r0=2.0):
 
 		kinematics = Kinematics(pT = pT, s = s)
 	
-		y_range = [0.05, 0.95]
-		z_range = [0.2, 0.5]
-		Q2_range = [16, 100]
-		t_range = [0.01, 0.04]
+		y_range = phase_space['y']
+		z_range = phase_space['z']
+		Q2_min_fixed = phase_space['min Q2']
+		t_range = phase_space['t']
+		Q2_range = [Q2_min_fixed, 100]
 
 		npoints = points
 		y_values = np.linspace(y_range[0], y_range[1], npoints)
 		z_values = np.linspace(z_range[0], z_range[1], npoints)
 
 		Q2_max_values = 0.01 * s * y_values
-		Q2_grids = [np.linspace(Q2_range[0], Q2_max, npoints) for Q2_max in Q2_max_values]
+		Q2_grids = [np.linspace(Q2_min_fixed, Q2_max, npoints) for Q2_max in Q2_max_values]
 
 		dy = (y_values[1] - y_values[0])
 		dz = (z_values[1] - z_values[0]) 
@@ -733,7 +738,7 @@ class DIJET:
 				kinematics.x = x
 
 				for z in z_values:
-					if np.sqrt(Q2)*np.sqrt(z*(1-z)) < 2: continue
+					if np.sqrt(Q2)*np.sqrt(z*(1-z)) < r0: continue
 					kinematics.z = z
 					kinematics.delta = 1 	# doing t integral analytically so just set to 1 in expressions
 					result += dy * dz * dQ2 * self.angle_integrated_numerator(kinematics, weight=weight, diff='dy')
@@ -751,7 +756,7 @@ class DIJET:
 
 
 
-	def integrated_numerator_approx(self, pT, s, phase_space, weight='1', points=10):
+	def integrated_numerator_approx(self, pT, s, phase_space, weight='1', points=10, r0 = 2.0):
 
 		kinematics = Kinematics(pT=pT, s=s)
 
@@ -787,7 +792,7 @@ class DIJET:
 				kinematics.x = x
 
 				for k, z in enumerate(z_values):
-					if np.sqrt(Q2) * np.sqrt(z * (1 - z)) < 1.7: continue  
+					if np.sqrt(Q2) * np.sqrt(z * (1 - z)) < r0: continue  
 					kinematics.z = z
 					kinematics.delta = 1 
 
@@ -800,18 +805,19 @@ class DIJET:
 			t_integral = t_range[1] - t_range[0]
 
 		return result * t_integral
-
+		# return result * np.sqrt(t_range[1])
 
 
 	# returns denominator of asymmetry in pb or fb integrated over phase space except for pT (differential in p_T)
-	def integrated_numerator_mc(self, pT, s, weight='1', points=100):
+	def integrated_numerator_mc(self, pT, s, phase_space, weight='1', points=100, r0=2.0):
 
 		kins = Kinematics(pT = pT, s = s)
 	
-		y_range = [0.05, 0.95]
-		z_range = [0.2, 0.5]
-		t_range = [0.01, 0.04]
-		Q2_range = [16, 100]
+		y_range = phase_space['y']
+		z_range = phase_space['z']
+		Q2_min_fixed = phase_space['min Q2']
+		t_range = phase_space['t']
+		Q2_range = [Q2_min_fixed, 100]
 
 		rng = np.random.default_rng()
 
@@ -826,7 +832,7 @@ class DIJET:
 			kins.x = (kins.Q**2)/(s*kins.y)
 
 			if kins.x > 0.01: continue
-			if (kins.Q**2)*kins.z*(1-kins.z) < 4: continue
+			if np.sqrt((kins.Q**2)*kins.z*(1-kins.z)) < r0: continue
 
 			ran_sum += self.angle_integrated_numerator(kins, weight=weight, diff='dy')
 
@@ -835,7 +841,7 @@ class DIJET:
 		zmin = z_range[0]
 		zmax = z_range[1]
 		ymax = y_range[1]
-		r02 = 4
+		r02 = r0**2
 		phase_space_volume = 0.01*0.5*s*(zmax - zmin)*(ymax**2)
 		phase_space_volume -= r02*ymax*np.log((zmax*(1-zmin))/(zmin*(1-zmax)))
 		phase_space_volume += ((r02**2)/(2*0.01*s))*((2*zmax - 1)/(zmax*(1-zmax)))
@@ -848,18 +854,56 @@ class DIJET:
 
 		return result
 
+	
+
+	# simpler way to do MC integration
+	def integrated_numerator_mc_new(self, pT, s, phase_space, weight='1', points=100, r0=2.0):
+
+		kins = Kinematics(pT = pT, s = s)
+	
+		y_range = phase_space['y']
+		z_range = phase_space['z']
+		Q2_min_fixed = phase_space['min Q2']
+		t_range = phase_space['t']
+		Q2_range = [Q2_min_fixed, 100]
+
+		rng = np.random.default_rng()
+
+		Ntotal = 0
+		ran_sum = 0
+		while(Ntotal < points):
+			kins.y = rng.uniform(low=y_range[0], high=y_range[1])
+			kins.delta = np.sqrt(rng.uniform(low=t_range[0], high=t_range[1]))
+			kins.z = rng.uniform(low=z_range[0], high=z_range[1])
+			kins.Q = np.sqrt(rng.uniform(low=Q2_range[0], high=Q2_range[1]))
+			kins.x = (kins.Q**2)/(s*kins.y)
+
+			Ntotal += 1
+
+			if kins.x > 0.01: continue
+			if np.sqrt((kins.Q**2)*kins.z*(1-kins.z)) < r0: continue
+
+			ran_sum += self.angle_integrated_numerator(kins, weight=weight, diff='dy')
+
+
+		box_volume = (y_range[1]-y_range[0])*(Q2_range[1]-Q2_range[0])*(t_range[1]-t_range[0])*(z_range[1]-z_range[0])
+
+		result = ran_sum*(1/points)*box_volume
+
+		return result
+
 
 
 
 	# returns denominator of asymmetry in pb or fb integrated over phase space except for pT (differential in p_T)
-	def integrated_denominator(self, pT, s, points=50):
+	def integrated_denominator(self, pT, s, phase_space, points=50, r0=2.0):
 
 		kinematics = Kinematics(pT = pT, s = s)
-	
-		y_range = [0.05, 0.95]
-		z_range = [0.2, 0.5]
-		t_range = [0.01, 0.04]
-		Q2_min = 16
+
+		y_range = phase_space['y']
+		z_range = phase_space['z']
+		Q2_min = phase_space['min Q2']
+		t_range = phase_space['t']
 
 		y_values = np.linspace(y_range[0], y_range[1], points)
 		z_values = np.linspace(z_range[0], z_range[1], points)
@@ -886,7 +930,7 @@ class DIJET:
 
 				for iz, z in enumerate(z_values):
 					if iz == len(z_values)-1: continue
-					if np.sqrt(Q2)*np.sqrt(z*(1-z)) < 2: continue
+					if np.sqrt(Q2)*np.sqrt(z*(1-z)) < r0: continue
 
 					kinematics.z = z
 					kinematics.delta = 1 	# doing t integral analytically so just set to 1 in expressions
@@ -902,7 +946,7 @@ class DIJET:
 
 
 	# returns denominator of asymmetry in pb or fb integrated over phase space except for pT (differential in p_T)
-	def integrated_denominator_dx(self, pT, s, points=50):
+	def integrated_denominator_dx(self, pT, s, points=50, r0=2.0):
 
 		kinematics = Kinematics(pT = pT, s = s)
 	
@@ -937,7 +981,7 @@ class DIJET:
 
 				for iz, z in enumerate(z_values):
 					if iz == len(z_values)-1: continue
-					if np.sqrt(Q2)*np.sqrt(z*(1-z)) < 2: continue
+					if np.sqrt(Q2)*np.sqrt(z*(1-z)) < r0: continue
 
 					kinematics.z = z
 					kinematics.delta = 1 	# doing t integral analytically so just set to 1 in expressions
@@ -952,7 +996,7 @@ class DIJET:
 
 
 
-	def integrated_denominator_approx(self, pT, s, phase_space, points=10):
+	def integrated_denominator_approx(self, pT, s, phase_space, weight='1', points=10, r0 = 2.0):
 
 		kinematics = Kinematics(pT=pT, s=s)
 
@@ -989,28 +1033,34 @@ class DIJET:
 				kinematics.x = x
 
 				for k, z in enumerate(z_values):
-					if np.sqrt(Q2) * np.sqrt(z * (1 - z)) < 1.7: continue  
+					if np.sqrt(Q2) * np.sqrt(z * (1 - z)) < r0: continue  
 					kinematics.z = z
 					kinematics.delta = 1 
 
 					weight_factor = y_w[i] * Q2_w[j] * z_w[k]
-					result += weight_factor * self.angle_integrated_denominator(kinematics, diff='dy')
+					result += weight_factor * self.angle_integrated_denominator(kinematics, weight, diff='dy')
 
-		t_integral = t_range[1] - t_range[0]
+		if weight in ['cos(phi_Dp)', 'cos(phi_Dp)cos(2*phi_kp)', 'cos(2*phi_kp)cos(phi_Dp)', 'sin(phi_Dp)sin(2*phi_kp)', 'sin(2*phi_kp)sin(phi_Dp)']:
+			t_integral = (2.0 / 3.0) * ((t_range[1]**1.5) - (t_range[0]**1.5))
+		elif weight in ['1', 'cos(2*phi_kp)']:
+			t_integral = t_range[1] - t_range[0]
 
-		return result * t_integral
+
+		# return result * t_integral
+		return result
 
 
 
 	# returns denominator of asymmetry in pb or fb integrated over phase space except for pT (differential in p_T)
-	def integrated_denominator_mc(self, pT, s, points=100):
+	def integrated_denominator_mc(self, pT, s, phase_space, points=100, r0=2.0):
 
 		kins = Kinematics(pT = pT, s = s)
 	
-		y_range = [0.05, 0.95]
-		z_range = [0.2, 0.5]
-		t_range = [0.01, 0.04]
-		Q2_range = [16, 100]
+		y_range = phase_space['y']
+		z_range = phase_space['z']
+		Q2_min_fixed = phase_space['min Q2']
+		t_range = phase_space['t']
+		Q2_range = [Q2_min_fixed, 100]
 
 		rng = np.random.default_rng()
 
@@ -1025,7 +1075,7 @@ class DIJET:
 			kins.x = (kins.Q**2)/(s*kins.y)
 
 			if kins.x > 0.01: continue
-			if (kins.Q**2)*kins.z*(1-kins.z) < 4: continue
+			if np.sqrt((kins.Q**2)*kins.z*(1-kins.z)) < r0: continue
 
 			ran_sum += self.angle_integrated_denominator(kins, diff='dy')
 
@@ -1034,7 +1084,7 @@ class DIJET:
 		zmin = z_range[0]
 		zmax = z_range[1]
 		ymax = y_range[1]
-		r02 = 4
+		r02 = r0**2
 		phase_space_volume = 0.01*0.5*s*(zmax - zmin)*(ymax**2)
 		phase_space_volume -= r02*ymax*np.log((zmax*(1-zmin))/(zmin*(1-zmax)))
 		phase_space_volume += ((r02**2)/(2*0.01*s))*((2*zmax - 1)/(zmax*(1-zmax)))
@@ -1270,45 +1320,28 @@ if __name__ == '__main__':
 	# for points in [5, 10, 15, 20, 25, 30, 35, 40]:
 	# for points in range(3, 30):
 		
-	points = 7
+	for points in range(3, 10):
 
-	lumi = 100
+		lumi = 100
 
-	for pT in range(1,10):
+		for pT in range(1,2):
 
-		test_kins.pT = pT
+			test_kins.pT = pT
+			print(pT)
 
-		space = {
-			'y' : [0.05, 0.95],
-			'z' : [0.2, 0.8],
-			'min Q2' : 16, 
-			't' : [0.01, 0.04]
-		}
+			space = {
+				'y' : [0.05, 0.95],
+				'z' : [0.2, 0.8],
+				'min Q2' : 16, 
+				't' : [0.01, 0.04]
+			}
 
-		space_prime = {
-			'y' : [0.05, 0.95],
-			'z' : [0.2, 0.3],
-			'min Q2' : 16, 
-			't' : [0.01, 0.04]
-		}
+			# sigma = dj.integrated_numerator_approx(test_kins.pT, test_kins.s, space, points=points)
+			sigma_new = dj.integrated_numerator_mc_new(test_kins.pT, test_kins.s, space, points=points*1000)
 
-		# y_range = phase_space['y']
-		# z_range = phase_space['z']
-		# Q2_min_fixed = phase_space['min Q2']
-		# t_range = phase_space['t']
-
-		# y_range = [0.05, 0.95]
-		# z_range = [0.2, 0.5]
-		# Q2_min_fixed = 16
-		# t_range = [0.01, 0.04]
-
-		sigma = dj.integrated_denominator_approx(test_kins.pT, test_kins.s, space, points=points)
-		sigma_prime = dj.integrated_denominator_approx(test_kins.pT, test_kins.s, space_prime, points=points)
-		num_prime = dj.integrated_numerator_approx(test_kins.pT, test_kins.s, space_prime, weight='cos(phi_Dp)', points=points)
-
-
-		print('A',np.sqrt((0.5*sigma_prime)/((sigma**2)*lumi))/(num_prime/sigma))
-		# print('del A', np.sqrt(sigma_prime/((sigma**2)*lumi)) )
+			# print('mc:' , sigma)
+			print('mc (new)', sigma_new)
+			# print('diff (points):', sigma- sigma_new, points)
 
 
 
