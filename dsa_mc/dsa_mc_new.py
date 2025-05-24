@@ -24,25 +24,22 @@ if __name__ == '__main__':
 	root_s = float(sys.argv[3])
 	fixed_s = root_s**2
 
+	ranges = {
+		'Q2': [16, 100],
+		'y': [0.05, 0.95],   
+		'|t|': [0.01, 0.04],   # |t| = \Delta**2
+		'pT': [0, 10],
+		'z': [0.2, 0.5],
+		'phi_Dp': [0, 2*np.pi],
+		'phi_kp': [0, 2*np*pi]
+		}
+
 	print('=== DSA for dijets MC generator ===')
 	print('== output file name:', outfile)
 	print('== root s =', root_s, 'GeV')
-
-	ranges = {
-			'Q2': [0, 100],
-			'y': [0.05, 0.95],   
-			'|t|': [0.01, 0.07],   # |t| = \Delta**2
-			'pT': [0, 10],
-			# 'z': [0.2, 0.8]
-			'z': [0.2, 0.5]
-			}
-
 	print('== parameter ranges:')
-	for ivar, irange in ranges.items():
-		print(ivar, irange)
-
+	for ivar, irange in ranges.items(): print(ivar, irange)
 	print('== starting generation of', sample_size, 'points')
-
 
 	dj = dijet.DIJET(nreplica=1, constrained_moments=True)
 	dj.load_params('replica_params_pp.csv')
@@ -54,8 +51,6 @@ if __name__ == '__main__':
 	while len(data) < sample_size:
 
 		rp = get_random_point(rng, ranges)
-
-		# rp['pT'] = 1.0
 
 		# physical constraints ###############################
 		rp['x'] = rp['Q2']/(fixed_s*rp['y'])
