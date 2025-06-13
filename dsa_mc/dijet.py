@@ -32,14 +32,17 @@ def save(data, name):
 
 
 def regulate_IR(values, r, params):
-
 	if params[0] == 'gauss':
 		values *= np.exp(-(r**2)*params[1])
-
 	elif params[0] == 'skin':
 		values *= 1.0/(1 + np.exp(params[1]*((r/params[2]) - 1)))
-
 	return values
+
+
+def map_to_interval(ns, ws, a, b):
+	mapped_nodes = 0.5 * (b + a) + 0.5 * (b - a) * ns
+	mapped_weights = 0.5 * (b - a) * ws
+	return mapped_nodes, mapped_weights
 
 
 @dataclass
@@ -57,7 +60,28 @@ class Kinematics:
 
 
 class DIJET:
-	def __init__(self, nreplica=1, lambdaIR=0.3, deta=0.05, gauss_param=0.0, mv_only=False, fix_moments=False, old_rap=False, corrected_evo=False, constrained_moments=False):
+	def __init__(self, **options):
+
+		# define optional parameters
+		replica = options.get('replica', 1)
+		self.lambdaIR = options.get('lambdaIR', 0.3)
+		self.deta = options.get('deta', 0.05)
+		self.gauss_param = options.get('gauss_param', 0.0)
+		fit_type = options.get('fit_type', 'pp')
+
+		# testing conditionals
+		self.mv_only = options.get('mv_only', False)
+		self.fix_moments = options.get('fix_moments', False)
+		self.old_rap = options.get('old_rap', False)
+		self.corrected_evo = options.get('corrected_evo', False)
+		self.constrained_moments = options.get('constrained_moments', False)
+
+		# warn about testing conditionals
+		if self.mv_only: print('--> !!! Using only initial conditions for N!')
+		if self.fix_moments: print('--> !!! Moment amplitude parameters are fixed!')
+		if self.old_rap: print('--> !!! Using ln(1/x) in argument of N!')
+		if self.corrected_evo: print('--> !!! Using corrected evolution!')
+		if self.constrained_moments: print('--> !!! Using constrained moment parameters!')
 
 		# define physical constants
 		self.alpha_em = 1/137.0
@@ -68,44 +92,23 @@ class DIJET:
 		self.Zssq = 1.0/9.0
 		self.Zfsq = self.Zusq + self.Zdsq + self.Zssq
 
-		# integration parameters
-		self.lambdaIR = lambdaIR
-		self.gauss_param = gauss_param
-		self.deta = deta
-
-		# testing conditionals
-		self.mv_only = mv_only
-		if mv_only: print('Using only initial conditions for N!')
-
-		self.fix_moments = fix_moments
-		if fix_moments: print('Moment amplitude parameters are fixed')
-
-		self.old_rap = old_rap
-		if old_rap: print('Using ln(1/x) in argument of N!')
-
-		self.corrected_evo = corrected_evo
-		if corrected_evo: print('Using corrected evolution')
-
-		self.constrained_moments = constrained_moments
-		if constrained_moments: print('Using constrained moment parameters')
-
 		self.current_dir = os.path.dirname(os.path.abspath(__file__))
 
 		self.load_dipoles()
-		self.load_params()
-		self.set_params(nreplica)
+		self.load_params(fit_type)
+		self.set_params(replica)
 
 
 	def load_dipoles(self):
 
-		# load polarized dipole amplitudes
+		#-- load polarized dipole amplitudes
 		deta_str = 'd'+str(self.deta)[2:]
-		polar_indir = self.current_dir + f'/dipoles/{deta_str}-rc/'
+		polar_indir = f'/dipoles/{deta_str}-rc/'
 		amps = ['Qu', 'Qd', 'Qs', 'GT', 'G2', 'I3u', 'I3d', 'I3s', 'I3T', 'I4', 'I5']
 
 		if self.corrected_evo:
 			self.deta = 0.08 # only one supported right now
-			polar_indir = self.current_dir + f'/dipoles/d08-rc-corrected/'
+			polar_indir = f'/dipoles/d08-rc-corrected/'
 			amps = ['Qu', 'Qd', 'Qs', 'GT', 'G2', 'QTu', 'QTd', 'QTs', 'I3u', 'I3d', 'I3s', 'I3T', 'I4', 'I5']
 
 		self.basis_dipoles = {}
@@ -124,15 +127,14 @@ class DIJET:
 				self.basis_dipoles[iamp][jamp] = {}
 				for jbasis in ['eta', 's10','1']:
 
-					self.basis_dipoles[iamp][jamp][jbasis] = load(f'{polar_indir}pre-cook-{jamp}-{jbasis}-{iamp}.dat')
+					self.basis_dipoles[iamp][jamp][jbasis] = load(f'{self.current_dir}{polar_indir}pre-cook-{jamp}-{jbasis}-{iamp}.dat')
 
 
 		#--load unpolarized dipole amplitude
 		# mv parameters from 0902.1112
-		# unpolar_input_file = self.current_dir + '/dipoles/narr_ymin4.61_ymax9.81_AAMS09.dat'
 
-		unpolar_file = 'narr_ymin4.61_ymax14.91_AAMS09.dat'
-		unpolar_input_file = self.current_dir + '/dipoles/' + unpolar_file
+		unpolar_file = '/dipoles/narr_ymin4.61_ymax14.91_AAMS09.dat'
+		unpolar_input_file = self.current_dir + unpolar_file
 		self.normN = 0.5*32.77*(1/0.3894)  # value of b integral in mb (converted to GeV^-2)
 
 		# mv parameters from 2311.10491 (NOT SUPPORTED YET)
@@ -140,14 +142,10 @@ class DIJET:
 		# unpolar_input_file = self.current_dir + '/dipoles/' + unpolar_file
 		# self.normN = 13.9*(1/0.3894)  # value of b integral in mb (converted to GeV^-2)
 
-		# unpolar_input_file = self.current_dir + '/dipoles/narr_ymin4.61_ymax9.81_Qs2_0.1.dat'
-		# unpolar_input_file = self.current_dir + '/dipoles/narr_ymin4.61_ymax9.81_Qs2_0.2.dat'
-		# unpolar_input_file = self.current_dir + '/dipoles/narr_ymin4.61_ymax9.81_Qs2_0.3.dat'
-
 		self.ndipole = np.loadtxt(unpolar_input_file)
 
-		print('loaded N(r^2, s) data from', unpolar_file)
-		print('loaded polarized amp data from', polar_indir)
+		print('--> loaded unpol. amp. data from', unpolar_file)
+		print('--> loaded pol. amp. data from', polar_indir)
 
 		# grid values for dipoles
 		n_psteps = len(self.basis_dipoles['Qu']['Qu']['eta'])
@@ -155,48 +153,51 @@ class DIJET:
 
 		n_usteps = len(self.ndipole[0])
 		self.dlogr = 0.01 # from evolution code
-		# self.logr_values = np.arange(-13.8, n_usteps*self.dlogr - 13.8, self.dlogr)
 		self.logr_values = np.arange(-13.8, round(np.log(1/self.lambdaIR), 2), self.dlogr)
 
 
-	def load_params(self, params_file='replica_params_dis.csv'):
+	def load_params(self, fit_type='dis', **options):
 
-		# load initial condition parameters
-		if params_file == 'replica_params_dis.csv':
-			fdf = pd.read_csv(self.current_dir + f'/dipoles/{params_file}')
-			header = ['nrep'] + [f'{ia}{ib}' for ia in ['Qu', 'Qd', 'Qs', 'um1', 'dm1', 'sm1', 'GT', 'G2'] for ib in ['eta', 's10', '1']]
+		if fit_type == 'dis':
+			params_file = '/dipoles/replica_params_dis.csv'
+			mom_params_file = '/dipoles/moment_params_dis.csv'
 
-		elif params_file == 'replica_params_pp.csv':
-			fdf = pd.read_csv(self.current_dir + f'/dipoles/{params_file}')
-			header = ['nrep', 'sol', 'chi'] + [f'{ia}{ib}' for ia in ['Qu', 'Qd', 'Qs', 'um1', 'dm1', 'sm1', 'GT', 'G2'] for ib in ['eta', 's10', '1']]
+		elif fit_type == 'pp':
+			params_file = '/dipoles/replica_params_pp_2.csv'
+			mom_params_file = '/dipoles/moment_params_pp.csv'
 
-		if self.corrected_evo:
-			params_file = 'replica_params_dis_corrected.csv'
-			fdf = pd.read_csv(self.current_dir + f'/dipoles/{params_file}')
+		elif fit_type == 'ones':
+			params_file = '/dipoles/replica_params_ones.csv'
+			mom_params_file = '/dipoles/moment_params_ones.csv'
 
-			header = ['nrep']
-			for ia in ['Qu', 'Qd', 'Qs', 'um1', 'dm1', 'sm1', 'GT', 'G2', 'QTu', 'QTd', 'QTs']:
-				for ib in ['eta', 's10', '1']:
-					if ia in ['GT', 'QTu', 'QTd', 'QTs'] and ib in ['eta', '1']: continue
-					header.append(f'{ia}{ib}')
+		elif fit_type == 'one_basis':
+			params_file = '/dipoles/replica_params_one_basis.csv'
+			mom_params_file = '/dipoles/moment_params_zeros.csv'
 
+		if options.get('moments', '') == 'random':
+			mom_params_file = '/dipoles/random_moment_params.csv'
 
+		fdf = pd.read_csv(self.current_dir + params_file)
+		header = ['nrep'] + [f'{ia}{ib}' for ia in ['Qu', 'Qd', 'Qs', 'um1', 'dm1', 'sm1', 'GT', 'G2'] for ib in ['eta', 's10', '1']]
 		fdf = fdf.dropna(axis=1, how='all')
 		fdf.columns = header
 		self.params = fdf
-
-		# load moment parameters (random)
-		if 'dis' in params_file:
-			mom_params_file = '/dipoles/moment_params_dis.csv'
-		else:
-			mom_params_file = '/dipoles/moment_params_pp.csv'
-
-		if not self.constrained_moments: mom_params_file = '/dipoles/random_moment_params.csv'
-
 		self.mom_params = pd.read_csv(self.current_dir + mom_params_file)
 
-		print('loaded params from', params_file)
-		print('loaded random moment params from', mom_params_file)
+		print('--> loaded params from', params_file)
+		print('--> loaded random moment params from', mom_params_file)
+
+
+		# if self.corrected_evo:
+		# 	params_file = 'replica_params_dis_corrected.csv'
+		# 	fdf = pd.read_csv(self.current_dir + f'/dipoles/{params_file}')
+
+		# 	header = ['nrep']
+		# 	for ia in ['Qu', 'Qd', 'Qs', 'um1', 'dm1', 'sm1', 'GT', 'G2', 'QTu', 'QTd', 'QTs']:
+		# 		for ib in ['eta', 's10', '1']:
+		# 			if ia in ['GT', 'QTu', 'QTd', 'QTs'] and ib in ['eta', '1']: continue
+		# 			header.append(f'{ia}{ib}')
+
 
 
 	def set_params(self, nreplica=1):
@@ -204,7 +205,7 @@ class DIJET:
 
 		sdf = self.params[self.params['nrep'] == nreplica]
 		assert len(sdf) == 1, 'Error: more than 1 replica selected...'
-		print('loaded replica', nreplica)
+		print('--> loaded replica', nreplica)
 
 		smdf = self.mom_params[self.mom_params['nrep'] == nreplica]
 		assert len(smdf) == 1, 'Error: more than 1 replica selected...'
@@ -309,7 +310,7 @@ class DIJET:
 		self.pdipoles = {}
 		amps = ['Qu', 'Qd', 'Qs', 'GT', 'G2', 'I3u', 'I3d', 'I3s', 'I3T', 'I4', 'I5']
 		for iamp in amps:
-			if iamp in ['GT', 'QTu', 'QTd', 'QTs', 'I3T', 'ITu', 'ITd', 'ITs']: continue
+			if iamp in ['GT', 'I3T']: continue
 
 			input_dipole = 0
 			for j, jamp in enumerate(amps):
@@ -378,6 +379,7 @@ class DIJET:
 
 			# Perform the sum
 			total_sum = np.sum(measure*c_term*d_term*jv_term*kv_term*amp_values)
+			# total_sum = measure*c_term*d_term*jv_term*kv_term*amp_values
 			results.append(total_sum)
 
 		if len(indices_array) > 1: return results
@@ -392,21 +394,11 @@ class DIJET:
 		prefactor = self.alpha_em*(self.Nc**2)*(Q**2)
 		w2 = (Q**2)*((1/x) - 1)
 
-		if 'TT_unpolar' in flavor:
-			# print(flavor, 'TT_unpolar')
-			prefactor *= self.Zfsq*(4*(z**2)*((1-z)**2)*((z)**2 + (1-z)**2))/((2*np.pi)**4)
-		elif 'LL_unpolar' in flavor:
-			# print(flavor, 'LL_unpolar')
-			prefactor *= self.Zfsq*(8*(z**3)*((1-z)**3))/((2*np.pi)**4)
-		elif 'TmT_unpolar' in flavor:
-			# print(flavor, 'TmT_unpolar')
-			prefactor *= self.Zfsq*(-8*(z**3)*((1-z)**3))/((2*np.pi)**4)
-		elif 'TT' in flavor:
-			# print(flavor, 'TT')
-			prefactor *= -(z*(1-z))/(2*(np.pi**4)*w2)
-		elif 'LT' in flavor:
-			# print(flavor, 'LT')
-			prefactor *= -((z*(1-z))**1.5)/(np.sqrt(2)*(np.pi**4)*w2)
+		if 'TT_unpolar' in flavor: prefactor *= self.Zfsq*(4*(z**2)*((1-z)**2)*((z)**2 + (1-z)**2))/((2*np.pi)**4)
+		elif 'LL_unpolar' in flavor: prefactor *= self.Zfsq*(8*(z**3)*((1-z)**3))/((2*np.pi)**4)
+		elif 'TmT_unpolar' in flavor: prefactor *= self.Zfsq*(-8*(z**3)*((1-z)**3))/((2*np.pi)**4)
+		elif 'TT' in flavor: prefactor *= -(z*(1-z))/(2*(np.pi**4)*w2)
+		elif 'LT' in flavor: prefactor *= -((z*(1-z))**1.5)/(np.sqrt(2)*(np.pi**4)*w2)
 
 		if flavor == 'A_TT':
 			Qu_11 = self.fourier_bessel(kvar, [[1,1,0,0]], 'Qu')
@@ -526,720 +518,236 @@ class DIJET:
 
 
 
-	# returns numerator of asymmetry in pb or fb (differential in Q^2, x (or y), \phi, p_T, z, t, \phi_p, \phi_\Delta)
-	def numerator(self, kinematics, diff='dy'):
+	# returns numerator or denominator of asymmetry in pb or fb (differential in Q^2, y (or x), \phi, p_T, z, t, \phi_p, \phi_\Delta)
+	def get_xsec(self, kinematics, diff='dy', kind='num', weight='1'):
 
 		Q, x, y, z, pT, delta = kinematics.Q, kinematics.x, kinematics.y, kinematics.z, kinematics.pT, kinematics.delta
 		phi_Dp, phi_kp = kinematics.phi_Dp, kinematics.phi_kp
 
-		numerator_prefactor = self.alpha_em/(4*(np.pi**2)*(Q**2))
-		if diff == 'dx':
-			numerator_prefactor *= (0.25*pT*y)/(x*z*(1-z))
-		elif diff == 'dy':
-			numerator_prefactor *= (0.25*pT)/(z*(1-z))
-		else:
-			raise ValueError('diff should be dx or dy')
+		if kind == 'num':
 
-		tt_term = (2-y) * self.get_coeff('A_TT', kinematics)
-		tt_term += (2-y) * (delta/pT)*np.cos(phi_Dp)*self.get_coeff('B_TT', kinematics)
+			prefactor = self.alpha_em/(4*(np.pi**2)*(Q**2))
+			if diff == 'dx': prefactor *= (0.25*pT*y)/(x*z*(1-z))
+			elif diff == 'dy': prefactor *= (0.25*pT)/(z*(1-z))
+			else: raise ValueError('diff should be dx or dy')
 
-		lt_term = np.sqrt(2-2*y) * np.cos(phi_kp)*self.get_coeff('A_LT', kinematics)
-		lt_term += np.sqrt(2-2*y) * (delta/pT)*np.cos(phi_Dp)*np.cos(phi_kp)*self.get_coeff('B_LT', kinematics)
-		lt_term += np.sqrt(2-2*y) * (delta/pT)*np.sin(phi_Dp)*np.sin(phi_kp)*self.get_coeff('C_LT', kinematics)
-
-		xsec = numerator_prefactor*(tt_term + lt_term)
-		xsec *= 0.3894*(10**12) # convert to fb
-		# xsec *= 0.3894*(10**9) # convert to pb
-
-		return xsec
-
-
-	# returns denominator of asymmetry in pb or fb (differential in Q^2, x (or y), \phi, p_T, z, t, \phi_p, \phi_\Delta)
-	def denominator(self, kinematics, diff='dy'):
-
-		Q, x, y, z, pT, delta = kinematics.Q, kinematics.x, kinematics.y, kinematics.z, kinematics.pT, kinematics.delta
-		phi_Dp, phi_kp = kinematics.phi_Dp, kinematics.phi_kp
-
-		denominator_prefactor = self.alpha_em/(4*(np.pi**2)*(Q**2)*y)
-		if diff == 'dx':
-			denominator_prefactor *= (0.25*pT*y)/(x*z*(1-z))
-		elif diff == 'dy':
-			denominator_prefactor *= (0.25*pT)/(z*(1-z))
-		else:
-			raise ValueError('diff should be dx or dy')
-
-		tt_term =  (1 + (1-y)**2) * self.get_coeff('A_TT_unpolar', kinematics)
-		tt_term += (1 + (1-y)**2) * (delta/pT)*np.cos(phi_Dp)*self.get_coeff('B_TT_unpolar', kinematics)
-
-		tmt_term = -2*(1-y)* np.cos(2*phi_kp)*self.get_coeff('A_TmT_unpolar', kinematics)
-		tmt_term += -2*(1-y)* (delta/pT)*np.cos(phi_Dp)*np.cos(2*phi_kp)*self.get_coeff('B_TmT_unpolar', kinematics)
-		tmt_term += -2*(1-y)* (delta/pT)*np.sin(phi_Dp)*np.sin(2*phi_kp)*self.get_coeff('C_TmT_unpolar', kinematics)
-
-		ll_term = 4*(1-y)* self.get_coeff('A_LL_unpolar', kinematics)
-		ll_term += 4*(1-y)* (delta/pT)*np.cos(phi_Dp)*self.get_coeff('B_LL_unpolar', kinematics)
-
-		xsec = denominator_prefactor*(tt_term + tmt_term + ll_term)
-		xsec *= 0.3894*(10**12) # convert to fb
-		# xsec *= 0.3894*(10**9) # convert to pb
-
-		# print(tt_term ,tmt_term, ll_term)
-		return xsec
-
-
-
-	# returns numerator of asymmetry in pb or fb integrated over azimuthal angles (differential in Q^2, x (or y), p_T, z, t)
-	def angle_integrated_numerator(self, kinematics, weight='1', diff='dy'):
-
-		Q, x, y, z, pT, delta = kinematics.Q, kinematics.x, kinematics.y, kinematics.z, kinematics.pT, kinematics.delta
-
-		numerator_prefactor = self.alpha_em/(4*(np.pi**2)*(Q**2))
-		if diff == 'dx':
-			numerator_prefactor *= (0.25*pT*y)/(x*z*(1-z))
-		elif diff == 'dy':
-			numerator_prefactor *= (0.25*pT)/(z*(1-z))
-		else:
-			raise ValueError('diff should be dx or dy')
-
-		if weight == '1':
 			tt_term = (2-y) * self.get_coeff('A_TT', kinematics)
-			lt_term = 0
-			numerator_prefactor *= 8*(np.pi**3)
+			tt_term += (2-y) * (delta/pT)*np.cos(phi_Dp)*self.get_coeff('B_TT', kinematics)
+			lt_term = np.sqrt(2-2*y) * np.cos(phi_kp)*self.get_coeff('A_LT', kinematics)
+			lt_term += np.sqrt(2-2*y) * (delta/pT)*np.cos(phi_Dp)*np.cos(phi_kp)*self.get_coeff('B_LT', kinematics)
+			lt_term += np.sqrt(2-2*y) * (delta/pT)*np.sin(phi_Dp)*np.sin(phi_kp)*self.get_coeff('C_LT', kinematics)
+			xsec = prefactor*(tt_term + lt_term)
+			xsec *= 0.3894*(10**12) # convert to fb
+			# xsec *= 0.3894*(10**9) # convert to pb
+			return xsec
 
-		elif weight == 'cos(phi_Dp)':
-			tt_term = (2-y) * (delta/pT) * self.get_coeff('B_TT', kinematics)
-			lt_term = 0
-			numerator_prefactor *= 4*(np.pi**3)
+		elif kind == 'den':
 
-		elif weight == 'cos(phi_Dp)cos(phi_kp)' or weight == 'cos(phi_kp)cos(phi_Dp)':
-			tt_term = 0
-			lt_term = np.sqrt(2-2*y) * (delta/pT) * self.get_coeff('B_LT', kinematics)
-			numerator_prefactor *= 2*(np.pi**3)
+			prefactor = self.alpha_em/(4*(np.pi**2)*(Q**2)*y)
+			if diff == 'dx': prefactor *= (0.25*pT*y)/(x*z*(1-z))
+			elif diff == 'dy': prefactor *= (0.25*pT)/(z*(1-z))
+			else: raise ValueError('diff should be dx or dy')
 
-		elif weight == 'sin(phi_Dp)sin(phi_kp)' or weight == 'sin(phi_kp)sin(phi_Dp)':
-			tt_term = 0
-			lt_term = np.sqrt(2-2*y) * (delta/pT) * self.get_coeff('C_LT', kinematics)
-			numerator_prefactor *= 2*(np.pi**3)
-
-		elif weight == 'cos(phi_kp)':
-			tt_term = 0
-			lt_term = np.sqrt(2-2*y) * self.get_coeff('A_LT', kinematics)
-			numerator_prefactor *= 4*(np.pi**3)
-
-		else:
-			raise ValueError(f'weight {weight} not recognized')
-
-		xsec = numerator_prefactor*(tt_term + lt_term)
-		xsec *= 0.3894*(10**12) # convert to fb
-		# xsec *= 0.3894*(10**9) # convert to pb
-
-		return xsec
+			tt_term =  (1 + (1-y)**2) * self.get_coeff('A_TT_unpolar', kinematics)
+			tt_term += (1 + (1-y)**2) * (delta/pT)*np.cos(phi_Dp)*self.get_coeff('B_TT_unpolar', kinematics)
+			tmt_term = -2*(1-y)* np.cos(2*phi_kp)*self.get_coeff('A_TmT_unpolar', kinematics)
+			tmt_term += -2*(1-y)* (delta/pT)*np.cos(phi_Dp)*np.cos(2*phi_kp)*self.get_coeff('B_TmT_unpolar', kinematics)
+			tmt_term += -2*(1-y)* (delta/pT)*np.sin(phi_Dp)*np.sin(2*phi_kp)*self.get_coeff('C_TmT_unpolar', kinematics)
+			ll_term = 4*(1-y)* self.get_coeff('A_LL_unpolar', kinematics)
+			ll_term += 4*(1-y)* (delta/pT)*np.cos(phi_Dp)*self.get_coeff('B_LL_unpolar', kinematics)
+			xsec = prefactor*(tt_term + tmt_term + ll_term)
+			xsec *= 0.3894*(10**12) # convert to fb
+			# xsec *= 0.3894*(10**9) # convert to pb
+			return xsec
 
 
-
-	# returns denominator of asymmetry in pb or fb integrated over azimuthal angles (differential in Q^2, x (or y), p_T, z, t)
-	def angle_integrated_denominator(self, kinematics, weight='1', diff='dy'):
+	# returns numerator or denominator of asymmetry in pb or fb integrated over azimuthal angles (differential in Q^2, y (or x), p_T, z, t)
+	def get_angle_integrated_xsec(self, kinematics, weight='1', diff='dy', kind='num'):
 
 		Q, x, y, z, pT, delta = kinematics.Q, kinematics.x, kinematics.y, kinematics.z, kinematics.pT, kinematics.delta
 
-		denominator_prefactor = self.alpha_em/(4*(np.pi**2)*(Q**2)*y)
-		if diff == 'dx':
-			denominator_prefactor *= (0.25*pT*y)/(x*z*(1-z))
-		elif diff == 'dy':
-			denominator_prefactor *= (0.25*pT)/(z*(1-z))
-		else:
-			raise ValueError('diff should be dx or dy')
+		if kind == 'num':
 
+			prefactor = self.alpha_em/(4*(np.pi**2)*(Q**2))
+			if diff == 'dx': prefactor *= (0.25*pT*y)/(x*z*(1-z))
+			elif diff == 'dy': prefactor *= (0.25*pT)/(z*(1-z))
+			else: raise ValueError('diff should be dx or dy')
 
-		if weight == '1':
-			tt_term =  (1 + (1-y)**2) * self.get_coeff('A_TT_unpolar', kinematics)
-			tmt_term = 0
-			ll_term = 4*(1-y)* self.get_coeff('A_LL_unpolar', kinematics)
-			denominator_prefactor *= 8*(np.pi**3)
+			if weight == '1':
+				tt_term = (2-y) * self.get_coeff('A_TT', kinematics)
+				lt_term = 0
+				prefactor *= 8*(np.pi**3)
 
-		elif weight == 'cos(phi_Dp)':
-			tt_term = (1 + (1-y)**2) * (delta/pT) * self.get_coeff('B_TT_unpolar', kinematics)
-			tmt_term = 0
-			ll_term = 4*(1-y)* (delta/pT)* self.get_coeff('B_LL_unpolar', kinematics)
-			denominator_prefactor *= 4*(np.pi**3)
+			elif weight == 'cos(phi_Dp)':
+				tt_term = (2-y) * (delta/pT) * self.get_coeff('B_TT', kinematics)
+				lt_term = 0
+				prefactor *= 4*(np.pi**3)
 
-		elif weight == 'cos(2*phi_kp)':
-			tt_term = 0
-			tmt_term = -2*(1-y) * self.get_coeff('A_TmT_unpolar', kinematics)
-			ll_term = 0
-			denominator_prefactor *= 4*(np.pi**3)
+			elif weight == 'cos(phi_Dp)cos(phi_kp)' or weight == 'cos(phi_kp)cos(phi_Dp)':
+				tt_term = 0
+				lt_term = np.sqrt(2-2*y) * (delta/pT) * self.get_coeff('B_LT', kinematics)
+				prefactor *= 2*(np.pi**3)
 
-		elif weight == 'cos(phi_Dp)cos(2*phi_kp)' or weight == 'cos(2*phi_kp)cos(phi_Dp)':
-			tt_term = 0
-			tmt_term = -2*(1-y)* (delta/pT) * self.get_coeff('B_TmT_unpolar', kinematics)
-			ll_term = 0
-			denominator_prefactor *= 2*(np.pi**3)
+			elif weight == 'sin(phi_Dp)sin(phi_kp)' or weight == 'sin(phi_kp)sin(phi_Dp)':
+				tt_term = 0
+				lt_term = np.sqrt(2-2*y) * (delta/pT) * self.get_coeff('C_LT', kinematics)
+				prefactor *= 2*(np.pi**3)
 
-		elif weight == 'sin(phi_Dp)sin(2*phi_kp)' or weight == 'sin(2*phi_kp)sin(phi_Dp)':
-			tt_term = 0
-			tmt_term = -2*(1-y)* (delta/pT) * self.get_coeff('C_TmT_unpolar', kinematics)
-			ll_term = 0
-			denominator_prefactor *= 2*(np.pi**3)
+			elif weight == 'cos(phi_kp)':
+				tt_term = 0
+				lt_term = np.sqrt(2-2*y) * self.get_coeff('A_LT', kinematics)
+				prefactor *= 4*(np.pi**3)
 
-		else:
-			raise ValueError(f'weight {weight} not recognized')
-
-
-		xsec = denominator_prefactor*(tt_term + tmt_term + ll_term)
-		xsec *= 0.3894*(10**12) # convert to fb
-		# xsec *= 0.3894*(10**9) # convert to pb
-
-		return xsec
-
-
-
-	# returns numerator of asymmetry in pb or fb integrated over phase space except for pT (differential in p_T)
-	def integrated_numerator(self, pT, s, phase_space, weight='1', points=50, r0=2.0):
-
-		kinematics = Kinematics(pT = pT, s = s)
-
-		y_range = phase_space['y']
-		z_range = phase_space['z']
-		Q2_min_fixed = phase_space['min Q2']
-		t_range = phase_space['t']
-		Q2_range = [Q2_min_fixed, 100]
-
-		npoints = points
-		y_values = np.linspace(y_range[0], y_range[1], npoints)
-		z_values = np.linspace(z_range[0], z_range[1], npoints)
-
-		Q2_max_values = 0.01 * s * y_values
-		Q2_grids = [np.linspace(Q2_min_fixed, Q2_max, npoints) for Q2_max in Q2_max_values]
-
-		dy = (y_values[1] - y_values[0])
-		dz = (z_values[1] - z_values[0])
-
-		result = 0
-		for iy, y in enumerate(y_values):
-			kinematics.y = y
-			if Q2_grids[iy][-1] < Q2_max_values[iy]: continue
-
-			for Q2 in Q2_grids[iy]:
-				dQ2 = (Q2_grids[iy][1] - Q2_grids[iy][0])
-				kinematics.Q = np.sqrt(Q2)
-				x = Q2/(s*y)
-				if x > 0.01: continue
-				kinematics.x = x
-
-				for z in z_values:
-					if np.sqrt(Q2)*np.sqrt(z*(1-z)) < r0: continue
-					kinematics.z = z
-					kinematics.delta = 1 	# doing t integral analytically so just set to 1 in expressions
-					result += dy * dz * dQ2 * self.angle_integrated_numerator(kinematics, weight=weight, diff='dy')
-
-
-		if weight in ['cos(phi_Dp)', 'cos(phi_Dp)cos(phi_kp)', 'cos(phi_kp)cos(phi_Dp)', 'sin(phi_Dp)sin(phi_kp)', 'sin(phi_kp)sin(phi_Dp)']:
-			t_integral = (2.0/3.0)*(t_range[1]**(1.5) - t_range[0]**(1.5))
-
-		elif weight in ['1', 'cos(phi_kp)']:
-			t_integral = t_range[1]-t_range[0]
-
-		# print(result, t_integral)
-
-		return result*t_integral
-
-
-
-	def integrated_numerator_approx(self, pT, s, phase_space, weight='1', points=10, r0 = 2.0):
-
-		kinematics = Kinematics(pT=pT, s=s)
-
-		y_range = phase_space['y']
-		z_range = phase_space['z']
-		Q2_min_fixed = phase_space['min Q2']
-		t_range = phase_space['t']
-
-		if 'max Q2' in phase_space: Q2_max_fixed = phase_space['max Q2']
-		else: Q2_max_fixed = 100
-
-		# Get Gauss–Legendre points and weights on [-1,1]
-		nodes, weights = leggauss(points)
-
-		def map_to_interval(ns, ws, a, b):
-			mapped_nodes = 0.5 * (b + a) + 0.5 * (b - a) * ns
-			mapped_weights = 0.5 * (b - a) * ws
-			return mapped_nodes, mapped_weights
-
-		y_values, y_w = map_to_interval(nodes, weights, *y_range)
-		z_values, z_w = map_to_interval(nodes, weights, *z_range)
-
-		result = 0.0
-		for i, y in enumerate(y_values):
-			kinematics.y = y
-			Q2_max = min(0.01 * s * y, Q2_max_fixed)
-			if Q2_max < Q2_min_fixed: continue
-			Q2_values, Q2_w = map_to_interval(nodes, weights, Q2_min_fixed, Q2_max)
-
-			for j, Q2 in enumerate(Q2_values):
-				kinematics.Q = np.sqrt(Q2)
-				x = Q2 / (s * y)
-				kinematics.x = x
-
-				for k, z in enumerate(z_values):
-					if np.sqrt(Q2) * np.sqrt(z * (1 - z)) < r0: continue
-					kinematics.z = z
-					kinematics.delta = 1
-
-					weight_factor = y_w[i] * Q2_w[j] * z_w[k]
-					result += weight_factor * self.angle_integrated_numerator(kinematics, weight=weight, diff='dy')
-
-		if weight in ['cos(phi_Dp)', 'cos(phi_Dp)cos(phi_kp)', 'cos(phi_kp)cos(phi_Dp)', 'sin(phi_Dp)sin(phi_kp)', 'sin(phi_kp)sin(phi_Dp)']:
-			t_integral = (2.0 / 3.0) * ((t_range[1]**1.5) - (t_range[0]**1.5))
-		elif weight in ['1', 'cos(phi_kp)']:
-			t_integral = t_range[1] - t_range[0]
-
-		return result * t_integral
-		# return result * np.sqrt(t_range[1])
-
-
-
-	def integrated_gauss(self, pT, s, phis, phase_space, points=10, r0=2.0, x0=0.01, kind='num'):
-
-		### setting up parameters
-		# method = options.get()
-
-
-		kinematics = Kinematics(pT=pT, s=s, phi_Dp=phis['Dp'], phi_kp=phis['kp'])
-		integrated = {var: isinstance(space, list) for var, space in phase_space.items()}
-
-		def map_to_interval(ns, ws, a, b):
-			mapped_nodes = 0.5 * (b + a) + 0.5 * (b - a) * ns
-			mapped_weights = 0.5 * (b - a) * ws
-			return mapped_nodes, mapped_weights
-
-		# Gauss–Legendre nodes, weights on [-1,1]
-		nodes, weights = leggauss(points)
-
-		if integrated['z']: 
-			z_values, z_w = map_to_interval(nodes, weights, *phase_space['z'])
-		else:
-			z_values, z_w = [phase_space['z']], [1]
-
-		if integrated['y']:
-			y_values, y_w = map_to_interval(nodes, weights, *phase_space['y'])
-		else:
-			y_values, y_w = [phase_space['y']], [1]
-
-		if integrated['t']:
-			t_values, t_w = map_to_interval(nodes, weights, *phase_space['t'])
-		else:
-			t_values, t_w = [phase_space['t']], [1]
-
-		result = 0.0
-		for i, y in enumerate(y_values):
-			kinematics.y = y
-
-			if integrated['Q2']:
-				Q2_max = min(x0 * s * y, phase_space['Q2'][1])
-				if Q2_max < phase_space['Q2'][0]: continue
-				Q2_values, Q2_w = map_to_interval(nodes, weights, phase_space['Q2'][0], Q2_max)
 			else:
-				Q2_values, Q2_w = [phase_space['Q2']], [1]
+				raise ValueError(f'weight {weight} not recognized')
 
-			for j, Q2 in enumerate(Q2_values):
-				kinematics.Q = np.sqrt(Q2)
-				x = Q2 / (s * y)
-				kinematics.x = x
+			xsec = prefactor*(tt_term + lt_term)
+			xsec *= 0.3894*(10**12) # convert to fb
+			# xsec *= 0.3894*(10**9) # convert to pb
+			return xsec
 
-				if x > 0.01: continue
+		elif kind == 'den':
 
-				for k, z in enumerate(z_values):
-					if np.sqrt(Q2) * np.sqrt(z * (1 - z)) < r0: continue
-					kinematics.z = z
+			prefactor = self.alpha_em/(4*(np.pi**2)*(Q**2)*y)
+			if diff == 'dx': prefactor *= (0.25*pT*y)/(x*z*(1-z))
+			elif diff == 'dy': prefactor *= (0.25*pT)/(z*(1-z))
+			else: raise ValueError('diff should be dx or dy')
 
-					for l, t in enumerate(t_values):
-						kinematics.delta = np.sqrt(t)
+			if weight == '1':
+				tt_term =  (1 + (1-y)**2) * self.get_coeff('A_TT_unpolar', kinematics)
+				tmt_term = 0
+				ll_term = 4*(1-y)* self.get_coeff('A_LL_unpolar', kinematics)
+				prefactor *= 8*(np.pi**3)
 
-						weight_factor = y_w[i] * Q2_w[j] * z_w[k] * t_w[l]
+			elif weight == 'cos(phi_Dp)':
+				tt_term = (1 + (1-y)**2) * (delta/pT) * self.get_coeff('B_TT_unpolar', kinematics)
+				tmt_term = 0
+				ll_term = 4*(1-y)* (delta/pT)* self.get_coeff('B_LL_unpolar', kinematics)
+				prefactor *= 4*(np.pi**3)
 
-						if kind == 'num':
-							result += 2*np.pi * weight_factor * self.numerator(kinematics, diff='dy')
-						else:
-							result += 2*np.pi * weight_factor * self.denominator(kinematics, diff='dy')
+			elif weight == 'cos(2*phi_kp)':
+				tt_term = 0
+				tmt_term = -2*(1-y) * self.get_coeff('A_TmT_unpolar', kinematics)
+				ll_term = 0
+				prefactor *= 4*(np.pi**3)
 
-		return result
+			elif weight == 'cos(phi_Dp)cos(2*phi_kp)' or weight == 'cos(2*phi_kp)cos(phi_Dp)':
+				tt_term = 0
+				tmt_term = -2*(1-y)* (delta/pT) * self.get_coeff('B_TmT_unpolar', kinematics)
+				ll_term = 0
+				prefactor *= 2*(np.pi**3)
 
+			elif weight == 'sin(phi_Dp)sin(2*phi_kp)' or weight == 'sin(2*phi_kp)sin(phi_Dp)':
+				tt_term = 0
+				tmt_term = -2*(1-y)* (delta/pT) * self.get_coeff('C_TmT_unpolar', kinematics)
+				ll_term = 0
+				prefactor *= 2*(np.pi**3)
 
-
-	def angle_integrated_gauss(self, pT, s, phase_space, points=10, r0=2.0, x0=0.01, kind='num'):
-
-
-
-
-
-
-		kinematics = Kinematics(pT=pT, s=s)
-		integrated = {var: isinstance(space, list) for var, space in phase_space.items()}
-
-		def map_to_interval(ns, ws, a, b):
-			mapped_nodes = 0.5 * (b + a) + 0.5 * (b - a) * ns
-			mapped_weights = 0.5 * (b - a) * ws
-			return mapped_nodes, mapped_weights
-
-		# Gauss–Legendre nodes, weights on [-1,1]
-		nodes, weights = leggauss(points)
-
-		if integrated['z']: 
-			z_values, z_w = map_to_interval(nodes, weights, *phase_space['z'])
-		else:
-			z_values, z_w = [phase_space['z']], [1]
-
-		if integrated['y']:
-			y_values, y_w = map_to_interval(nodes, weights, *phase_space['y'])
-		else:
-			y_values, y_w = [phase_space['y']], [1]
-
-		if integrated['t']:
-			t_values, t_w = map_to_interval(nodes, weights, *phase_space['t'])
-		else:
-			t_values, t_w = [phase_space['t']], [1]
-
-		result = 0.0
-		for i, y in enumerate(y_values):
-			kinematics.y = y
-
-			if integrated['Q2']:
-				Q2_max = min(x0 * s * y, phase_space['Q2'][1])
-				if Q2_max < phase_space['Q2'][0]: continue
-				Q2_values, Q2_w = map_to_interval(nodes, weights, phase_space['Q2'][0], Q2_max)
 			else:
-				Q2_values, Q2_w = [phase_space['Q2']], [1]
+				raise ValueError(f'weight {weight} not recognized')
 
-			for j, Q2 in enumerate(Q2_values):
-				kinematics.Q = np.sqrt(Q2)
-				x = Q2 / (s * y)
-				kinematics.x = x
-
-				if x > 0.01: continue
-
-				for k, z in enumerate(z_values):
-					if np.sqrt(Q2) * np.sqrt(z * (1 - z)) < r0: continue
-					kinematics.z = z
-
-					for l, t in enumerate(t_values):
-						kinematics.delta = np.sqrt(t)
-
-						weight_factor = y_w[i] * Q2_w[j] * z_w[k] * t_w[l]
-
-						if kind == 'num':
-							result += weight_factor * self.numerator(kinematics, diff='dy')
-						else:
-							result += weight_factor * self.denominator(kinematics, diff='dy')
-
-		return result 
+			xsec = prefactor*(tt_term + tmt_term + ll_term)
+			xsec *= 0.3894*(10**12) # convert to fb
+			# xsec *= 0.3894*(10**9) # convert to pb
+			return xsec
 
 
-	# returns denominator of asymmetry in pb or fb integrated over phase space except for pT (differential in p_T)
-	def integrated_numerator_mc(self, pT, s, phase_space, weight='1', points=100, r0=2.0):
 
-		kins = Kinematics(pT = pT, s = s)
+	def get_integrated_xsec(self, pT_values, s, phase_space, **options):
 
-		y_range = phase_space['y']
-		z_range = phase_space['z']
-		Q2_min_fixed = phase_space['min Q2']
-		t_range = phase_space['t']
-		Q2_range = [Q2_min_fixed, 100]
+		###### setting up parameters 
+		method = options.get('method', 'gauss-legendre')
+		r0 = options.get('r0', 2.0)
+		x0 = options.get('x0', 0.01)
+		kind = options.get('kind', 'num')
+		points = options.get('points', 10)
+		weight = options.get('weight', '1')
 
-		rng = np.random.default_rng()
+		# error checking
+		assert method in ['gauss-legendre', 'riemann', 'mc'], f'Error: method = {method} not recognized'
+		assert kind in ['num', 'den'], 'Error: kind must be "num" or "den"'
+		#############################
 
-		Neff = 0
-		ran_sum = 0
-		while(Neff < points):
-			kins.y = rng.uniform(low=y_range[0], high=y_range[1])
-			kins.delta = np.sqrt(rng.uniform(low=t_range[0], high=t_range[1]))
-			kins.z = rng.uniform(low=z_range[0], high=z_range[1])
-			kins.Q = np.sqrt(rng.uniform(low=Q2_range[0], high=Q2_range[1]))
+		# kinematics = Kinematics(pT=pT, s=s)
+		kinematics = Kinematics(s=s)
+		integrated = {var: isinstance(space, list) for var, space in phase_space.items()}
+		integrate_over_angles = isinstance(phase_space['phi_Dp'], list)
 
-			kins.x = (kins.Q**2)/(s*kins.y)
+		# choose right function to use
+		if integrate_over_angles:
+			xsec_func = self.get_angle_integrated_xsec
 
-			if kins.x > 0.01: continue
-			if np.sqrt((kins.Q**2)*kins.z*(1-kins.z)) < r0: continue
-
-			ran_sum += self.angle_integrated_numerator(kins, weight=weight, diff='dy')
-
-			Neff += 1
-
-		zmin = z_range[0]
-		zmax = z_range[1]
-		ymax = y_range[1]
-		r02 = r0**2
-		phase_space_volume = 0.01*0.5*s*(zmax - zmin)*(ymax**2)
-		phase_space_volume -= r02*ymax*np.log((zmax*(1-zmin))/(zmin*(1-zmax)))
-		phase_space_volume += ((r02**2)/(2*0.01*s))*((2*zmax - 1)/(zmax*(1-zmax)))
-		phase_space_volume -= ((r02**2)/(2*0.01*s))*((2*zmin - 1)/(zmin*(1-zmin)))
-		phase_space_volume += ((r02**2)/(2*0.01*s))*2*np.log((zmax*(1-zmin))/(zmin*(1-zmax)))
-		phase_space_volume *= t_range[1] - t_range[0]
+		else:
+			kinematics.phi_Dp = phase_space['phi_Dp']
+			kinematics.phi_kp = phase_space['phi_kp']
+			xsec_func = self.get_xsec
 
 
-		result = ran_sum*(1/points)*phase_space_volume
+		results = []
+		for pT in pT_values:
 
-		return result
+			kinematics.pT = pT
 
-	# generates sample of Kinematics variables from phase space
-	def gen_random_sample(self, phase_space, points):
+			# integrate using one of 3 methods: gaussian quadrature, riemann sums, or monte-carlo
+			if method == 'gauss-legendre':
 
-		kins_sample = []
-		box_volume = 1
+				# Gauss–Legendre nodes, weights on [-1,1]
+				nodes, weights = leggauss(points)
 
-		rng = np.random.default_rng()
-		for i in range(points):
-			kins = {}
-			for var in phase_space:
-				if isinstance(phase_space[var], list):
-					kins[var] = rng.uniform(low=phase_space[var][0], high=phase_space[var][1])
-					
-					if i == 0: box_volume *= phase_space[var][1] - phase_space[var][0]
-
+				if integrated['z']: 
+					z_values, z_w = map_to_interval(nodes, weights, *phase_space['z'])
 				else:
-					kins[var] = phase_space[var]
+					z_values, z_w = [phase_space['z']], [1]
 
-			kins['x'] = kins['Q2']/(kins['s']*kins['y'])
+				if integrated['y']:
+					y_values, y_w = map_to_interval(nodes, weights, *phase_space['y'])
+				else:
+					y_values, y_w = [phase_space['y']], [1]
 
-			# convert t and Q^2 to Kinematics delta and Q
-			kins['Q'] = np.sqrt(kins['Q2'])
-			kins['delta'] = np.sqrt(kins['t'])
-			del kins['Q2']
-			del kins['t']
+				if integrated['t']:
+					t_values, t_w = map_to_interval(nodes, weights, *phase_space['t'])
+				else:
+					t_values, t_w = [phase_space['t']], [1]
 
-			kins_sample.append(Kinematics(**kins))
+				result = 0.0
+				for i, y in enumerate(y_values):
+					kinematics.y = y
 
-		return kins_sample, box_volume
+					if integrated['Q2']:
+						Q2_max = min(x0 * s * y, phase_space['Q2'][1])
+						if Q2_max < phase_space['Q2'][0]: continue
+						Q2_values, Q2_w = map_to_interval(nodes, weights, phase_space['Q2'][0], Q2_max)
+					else:
+						Q2_values, Q2_w = [phase_space['Q2']], [1]
 
+					for j, Q2 in enumerate(Q2_values):
+						kinematics.Q = np.sqrt(Q2)
+						x = Q2 / (s * y)
+						kinematics.x = x
 
-	# simpler way to do MC integration
-	def integrated_mc_new(self, phase_space, points=100, r0=2.0, kind='num'):
-		
-		rand_samp, box_volume = self.gen_random_sample(phase_space, points)
-			
-		ran_sum = 0
-		for rand_kins in rand_samp:
+						if x > 0.01: continue
 
-			if rand_kins.x > 0.01: continue
-			if np.sqrt((rand_kins.Q**2)*rand_kins.z*(1-rand_kins.z)) < r0: continue
+						for k, z in enumerate(z_values):
+							if np.sqrt(Q2) * np.sqrt(z * (1 - z)) < r0: continue
+							kinematics.z = z
 
-			if kind == 'num': ran_sum += self.numerator(rand_kins, diff='dy')
-			elif kind == 'denom': ran_sum += self.denominator(rand_kins, diff='dy')
+							for l, t in enumerate(t_values):
+								kinematics.delta = np.sqrt(t)
 
-		result = ran_sum*(1/points)*box_volume*2*np.pi 	# x2π for other angle in phase space
-		return result
+								weight_factor = y_w[i] * Q2_w[j] * z_w[k] * t_w[l]
+								result += weight_factor * xsec_func(kinematics, weight=weight, diff='dy', kind=kind)
 
+			# other methods not implemented here since GL way outperforms them 
+			# elif method == 'riemann': pass 
+			# elif method == 'mc': pass
 
+			results.append(result) 
 
+		return np.array(results)
 
-	# returns denominator of asymmetry in pb or fb integrated over phase space except for pT (differential in p_T)
-	def integrated_denominator(self, pT, s, phase_space, points=50, r0=2.0):
 
-		kinematics = Kinematics(pT = pT, s = s)
 
-		y_range = phase_space['y']
-		z_range = phase_space['z']
-		Q2_min = phase_space['min Q2']
-		t_range = phase_space['t']
-
-		y_values = np.linspace(y_range[0], y_range[1], points)
-		z_values = np.linspace(z_range[0], z_range[1], points)
-
-		dy = (y_values[1] - y_values[0])
-		dz = (z_values[1] - z_values[0])
-
-		result = 0
-		for iy, y in enumerate(y_values):
-			if iy == len(y_values)-1: continue
-			kinematics.y = y
-
-			Q2_max = 0.01*s*y
-			if Q2_max < Q2_min: continue
-			Q2_values = np.linspace(Q2_min, Q2_max, points)
-
-			for iQ2, Q2 in enumerate(Q2_values):
-				if iQ2 == len(Q2_values)-1: continue
-				dQ2 = (Q2_values[iQ2 + 1] - Q2)
-				kinematics.Q = np.sqrt(Q2)
-				x = Q2/(s*y)
-				if x > 0.01: continue
-				kinematics.x = x
-
-				for iz, z in enumerate(z_values):
-					if iz == len(z_values)-1: continue
-					if np.sqrt(Q2)*np.sqrt(z*(1-z)) < r0: continue
-
-					kinematics.z = z
-					kinematics.delta = 1 	# doing t integral analytically so just set to 1 in expressions
-					result += dy * dz * dQ2 * self.angle_integrated_denominator(kinematics, diff='dy')
-
-		t_integral = t_range[1]-t_range[0]
-
-		# print(result, t_integral)
-
-		return result*t_integral
-
-
-
-
-	# returns denominator of asymmetry in pb or fb integrated over phase space except for pT (differential in p_T)
-	def integrated_denominator_dx(self, pT, s, points=50, r0=2.0):
-
-		kinematics = Kinematics(pT = pT, s = s)
-
-		x_range = [0.0001, 0.01]
-		z_range = [0.2, 0.5]
-		t_range = [0.01, 0.04]
-		Q2_min = 16
-
-		x_values = np.linspace(x_range[0], x_range[1], points)
-		z_values = np.linspace(z_range[0], z_range[1], points)
-
-		dx = (x_values[1] - x_values[0])
-		dz = (z_values[1] - z_values[0])
-
-		result = 0
-		for ix, x in enumerate(x_values):
-			if ix == len(x_values)-1: continue
-			kinematics.x = x
-
-			Q2_max = x*s*1
-			if Q2_max < Q2_min: continue
-			Q2_values = np.linspace(Q2_min, Q2_max, points)
-
-			for iQ2, Q2 in enumerate(Q2_values):
-				if iQ2 == len(Q2_values)-1: continue
-				dQ2 = (Q2_values[iQ2 + 1] - Q2)
-				kinematics.Q = np.sqrt(Q2)
-
-				y= Q2/(s*x)
-				if y > 1: continue
-				kinematics.y = y
-
-				for iz, z in enumerate(z_values):
-					if iz == len(z_values)-1: continue
-					if np.sqrt(Q2)*np.sqrt(z*(1-z)) < r0: continue
-
-					kinematics.z = z
-					kinematics.delta = 1 	# doing t integral analytically so just set to 1 in expressions
-					result += dx * dz * dQ2 * self.angle_integrated_denominator(kinematics, diff='dx')
-
-		t_integral = t_range[1]-t_range[0]
-
-		# print(result, t_integral)
-
-		return result*t_integral
-
-
-
-
-	def integrated_denominator_approx(self, pT, s, phase_space, weight='1', points=10, r0 = 2.0):
-
-		kinematics = Kinematics(pT=pT, s=s)
-
-		y_range = phase_space['y']
-		z_range = phase_space['z']
-		Q2_min_fixed = phase_space['min Q2']
-		t_range = phase_space['t']
-
-		if 'max Q2' in phase_space: Q2_max_fixed = phase_space['max Q2']
-		else: Q2_max_fixed = 100
-
-
-		# Get Gauss–Legendre points and weights on [-1,1]
-		nodes, weights = leggauss(points)
-
-		def map_to_interval(ns, ws, a, b):
-			mapped_nodes = 0.5 * (b + a) + 0.5 * (b - a) * ns
-			mapped_weights = 0.5 * (b - a) * ws
-			return mapped_nodes, mapped_weights
-
-		y_values, y_w = map_to_interval(nodes, weights, *y_range)
-		z_values, z_w = map_to_interval(nodes, weights, *z_range)
-
-		result = 0.0
-		for i, y in enumerate(y_values):
-			kinematics.y = y
-			Q2_max = min(0.01 * s * y, Q2_max_fixed)
-			if Q2_max < Q2_min_fixed: continue
-			Q2_values, Q2_w = map_to_interval(nodes, weights, Q2_min_fixed, Q2_max)
-
-			for j, Q2 in enumerate(Q2_values):
-				kinematics.Q = np.sqrt(Q2)
-				x = Q2 / (s * y)
-				kinematics.x = x
-
-				for k, z in enumerate(z_values):
-					if np.sqrt(Q2) * np.sqrt(z * (1 - z)) < r0: continue
-					kinematics.z = z
-					kinematics.delta = 1
-
-					weight_factor = y_w[i] * Q2_w[j] * z_w[k]
-					result += weight_factor * self.angle_integrated_denominator(kinematics, weight, diff='dy')
-
-		if weight in ['cos(phi_Dp)', 'cos(phi_Dp)cos(2*phi_kp)', 'cos(2*phi_kp)cos(phi_Dp)', 'sin(phi_Dp)sin(2*phi_kp)', 'sin(2*phi_kp)sin(phi_Dp)']:
-			t_integral = (2.0 / 3.0) * ((t_range[1]**1.5) - (t_range[0]**1.5))
-		elif weight in ['1', 'cos(2*phi_kp)']:
-			t_integral = t_range[1] - t_range[0]
-
-
-		# return result * t_integral
-		return result
-
-
-
-	# returns denominator of asymmetry in pb or fb integrated over phase space except for pT (differential in p_T)
-	def integrated_denominator_mc(self, pT, s, phase_space, points=100, r0=2.0):
-
-		kins = Kinematics(pT = pT, s = s)
-
-		y_range = phase_space['y']
-		z_range = phase_space['z']
-		Q2_min_fixed = phase_space['min Q2']
-		t_range = phase_space['t']
-		Q2_range = [Q2_min_fixed, 100]
-
-		rng = np.random.default_rng()
-
-		Neff = 0
-		ran_sum = 0
-		while(Neff < points):
-			kins.y = rng.uniform(low=y_range[0], high=y_range[1])
-			kins.delta = np.sqrt(rng.uniform(low=t_range[0], high=t_range[1]))
-			kins.z = rng.uniform(low=z_range[0], high=z_range[1])
-			kins.Q = np.sqrt(rng.uniform(low=Q2_range[0], high=Q2_range[1]))
-
-			kins.x = (kins.Q**2)/(s*kins.y)
-
-			if kins.x > 0.01: continue
-			if np.sqrt((kins.Q**2)*kins.z*(1-kins.z)) < r0: continue
-
-			ran_sum += self.angle_integrated_denominator(kins, diff='dy')
-
-			Neff += 1
-
-		zmin = z_range[0]
-		zmax = z_range[1]
-		ymax = y_range[1]
-		r02 = r0**2
-		phase_space_volume = 0.01*0.5*s*(zmax - zmin)*(ymax**2)
-		phase_space_volume -= r02*ymax*np.log((zmax*(1-zmin))/(zmin*(1-zmax)))
-		phase_space_volume += ((r02**2)/(2*0.01*s))*((2*zmax - 1)/(zmax*(1-zmax)))
-		phase_space_volume -= ((r02**2)/(2*0.01*s))*((2*zmin - 1)/(zmin*(1-zmin)))
-		phase_space_volume += ((r02**2)/(2*0.01*s))*2*np.log((zmax*(1-zmin))/(zmin*(1-zmax)))
-		phase_space_volume *= t_range[1] - t_range[0]
-
-
-		result = ran_sum*(1/points)*phase_space_volume
-
-		return result
-
-
-
-
-	def get_dipole_value(self, i,j,amp):
-		return self.pdipoles[amp][i,j]
-
-	def save_dipole(self, amp, filename):
-		save(self.pdipoles[amp], filename)
+	########## functions to calculate helicity objects below
 
 
 	def alpha_s(self, running, s0, s):
@@ -1250,7 +758,7 @@ class DIJET:
 		elif running==True: return (np.sqrt(Nc/(2*np.pi))/beta2)*(1/(s0+s))
 
 
-	# functions to calculate helicity objects below
+
 	def get_g1(self, x, Q2):
 
 		g1 = 0
@@ -1398,77 +906,81 @@ class DIJET:
 		return ifunc(xmax)
 
 
+def compute_row(args):
+	phi_Dp, phi_kp, test_kins, space = args
 
+	# Create a local DIJET instance inside each process
+	dj_local = DIJET(1, constrained_moments=True)
+	dj_local.load_params('replica_params_pp.csv')
+	dj_local.set_params(4)
+
+	# Local copy of space for thread-safety
+	local_space = space.copy()
+	local_space['phi_Dp'] = phi_Dp
+	local_space['phi_kp'] = phi_kp
+
+	sigma_num = dj_local.get_integrated_xsec(test_kins.pT, test_kins.s, local_space, points=7, kind='num')
+	sigma_den = dj_local.get_integrated_xsec(test_kins.pT, test_kins.s, local_space, points=7, kind='den')
+
+	print(phi_Dp, phi_kp)
+
+	return [phi_Dp, phi_kp, sigma_num, sigma_den]
+
+	
 
 if __name__ == '__main__':
-
 	import time
 
 	test_kins = Kinematics()
 	test_kins.x = 0.01
 	test_kins.Q = 5
 	test_kins.z = 0.4
-	test_kins.s = 120**2
+	test_kins.s = 95**2
 	test_kins.delta = 0.2
 	test_kins.phi_Dp = 0
 	test_kins.phi_kp = 0
-	test_kins.pT = 1.0
+	test_kins.pT = 10.0
 	test_kins.y = (test_kins.Q**2)/(test_kins.s*test_kins.x)
 
 	print(test_kins.y)
 	print('pT:', test_kins.pT)
 	print('root s', np.sqrt(test_kins.s))
 
+	space = {
+		'y' : [0.05, 0.95],
+		'z' : [0.2, 0.5],
+		'Q2' : [16, 100],
+		# 't' : [0.01, 0.04],
+		't' : 0.04,
+		'phi_Dp' : [0, 2*np.pi],
+		'phi_kp' : [0, 2*np.pi]
+	}
+
 	dj = DIJET(1, constrained_moments=True)
 	dj.load_params('replica_params_pp.csv')
 	dj.set_params(4)
 
+	test_den = dj.get_integrated_xsec([test_kins.pT], test_kins.s, space, weight='1', points=7, kind='den')
+	test_num = dj.get_integrated_xsec([test_kins.pT], test_kins.s, space, weight='1', points=7, kind='num')
 
-	# space = {
-	# 	'y' : test_kins.y,
-	# 	'z' : test_kins.z,
-	# 	'Q2' : test_kins.Q**2,
-	# 	't' : test_kins.delta**2,
-	# 	'phi_Dp': [0, 2*np.pi], 
-	# 	'phi_kp': [0, 2*np.pi],
-	# 	's': test_kins.s,
-	# 	'pT': test_kins.pT
-	# }
-	space = {
-		'y' :		[0.05, 0.95],
-		'z' :		[0.2, 0.8],
-		'min Q2' :	16,
-		't' : 		[0.01, 0.04],
-	}
+	print(test_num, test_den, test_num/test_den)
 
 
-	space_2 = {
-		'y' :		[0.05, 0.95],
-		# 'y': 0.5,
-		'z' :		[0.2, 0.5],
-		# 'z' : 0.2,
-		'Q2' :		[16, 100],
-		# 'Q2': 30,
-		't' : 		[0.01, 0.04],
-		# 't' : 0.04
-	}
+	# den_array = []
+	# for weight in ['1', 'cos(2*phi_kp)', 'cos(phi_Dp)', 'cos(phi_Dp)cos(2*phi_kp)', 'sin(phi_Dp)sin(2*phi_kp)']:
+	# 	sigma_den = dj.get_integrated_xsec(test_kins.pT, test_kins.s, space, weight=weight, points=7, kind='den')
+	# 	den_array.append(round(sigma_den, 2))
+
+	# num_array = []
+	# for weight in ['1', 'cos(phi_Dp)', 'cos(phi_Dp)cos(phi_kp)', 'sin(phi_Dp)sin(phi_kp)']:
+	# 	sigma_num = dj.get_integrated_xsec(test_kins.pT, test_kins.s, space, weight=weight, points=7, kind='num')
+	# 	num_array.append(round(sigma_num, 2))
+
+	# print(', '.join(str(inum) for inum in np.array(num_array)))
+	# print(', '.join(str(iden) for iden in np.array(den_array)))
+	
 
 
-
-	dist = []
-	for phi_Dp in np.linspace(0, 2*np.pi, 10):
-		for phi_kp in np.linspace(0, 2*np.pi, 10):
-
-			print(phi_Dp, phi_kp)
-
-			phis = {'Dp': phi_Dp, 'kp': phi_kp}
-
-			sigma_num = dj.integrated_gauss(test_kins.pT, test_kins.s, phis, space_2, points=7, kind='num')
-			sigma_den = dj.integrated_gauss(test_kins.pT, test_kins.s, phis, space_2, points=7, kind='den')
-
-			dist.append([phi_Dp, phi_kp, sigma_num, sigma_den])
-		
-			np.savetxt('test_fit.dat', dist)
 
 
 

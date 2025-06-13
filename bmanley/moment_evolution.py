@@ -107,24 +107,25 @@ def evolve(deta, eta_max, Nf=3.0, ICs='ones', coupling='fixed', s0=1.0):
 	print(f'--> coupling: {coupling}')
 	print(f'--> amplitudes initialized to {ICs}')
 		
-	for j in range(1, nsteps + 1):
+
+	for j in range(nsteps + 1):
 		for i in range(j):
 			
 			Qu[i, j] = Qu[i, j-1] + Qu0[i, j] - Qu0[i, j-1]
 			Qu[i, j] += 0.5*d2*np.sum(alpha_s(cp,deta*np.arange(i, j-1))*(Qu[i:j-1, j-1] + 2*G2[i:j-1, j-1]))
-			Qu[i, j] += 0.5*d2*np.trace(alpha_s(cp,deta*np.arange(i))[:, np.newaxis]*(Qu[:i, j-i:j] + 2*G2[:i, j-i:j]))
 			Qu[i, j] += d2*np.sum(alpha_s(cp,deta*np.arange(i, j-1))*(2*G[i:j-1,j-1] + Qu[i:j-1,j-1] + 2*G2[i:j-1,j-1] + 2*GmT[i, i:j-1, j-1] - GmBu[i, i:j-1, j-1] + 2*Gm2[i, i:j-1, j-1]))
+			Qu[i, j] += 0.5*d2*np.trace(alpha_s(cp,deta*np.arange(i-1))[:, np.newaxis]*(Qu[:i-1, j-i-1:j] + 2*G2[:i-1, j-i-1:j]))
 
 			Qd[i, j] = Qd[i, j-1] + Qd0[i, j] - Qd0[i, j-1]
 			Qd[i, j] += 0.5*d2*np.sum(alpha_s(cp,deta*np.arange(i, j-1))*(Qd[i:j-1, j-1] + 2*G2[i:j-1, j-1]))
-			Qd[i, j] += 0.5*d2*np.trace(alpha_s(cp,deta*np.arange(i))[:, np.newaxis]*(Qd[:i, j-i:j] + 2*G2[:i, j-i:j]))
 			Qd[i, j] += d2*np.sum(alpha_s(cp,deta*np.arange(i, j-1))*(2*G[i:j-1,j-1] + Qd[i:j-1,j-1] + 2*G2[i:j-1,j-1] + 2*GmT[i, i:j-1, j-1] - GmBd[i, i:j-1, j-1] + 2*Gm2[i, i:j-1, j-1]))
+			Qd[i, j] += 0.5*d2*np.trace(alpha_s(cp,deta*np.arange(i-1))[:, np.newaxis]*(Qd[:i-1, j-i-1:j] + 2*G2[:i-1, j-i-1:j]))
 
 			Qs[i, j] = Qs[i, j-1] + Qs0[i, j] - Qs0[i, j-1]
 			Qs[i, j] += 0.5*d2*np.sum(alpha_s(cp,deta*np.arange(i, j-1))*(Qs[i:j-1, j-1] + 2*G2[i:j-1, j-1]))
-			Qs[i, j] += 0.5*d2*np.trace(alpha_s(cp,deta*np.arange(i))[:, np.newaxis]*(Qs[:i, j-i:j] + 2*G2[:i, j-i:j]))
 			Qs[i, j] += d2*np.sum(alpha_s(cp,deta*np.arange(i, j-1))*(2*G[i:j-1,j-1] + Qs[i:j-1,j-1] + 2*G2[i:j-1,j-1] + 2*GmT[i, i:j-1, j-1] - GmBs[i, i:j-1, j-1] + 2*Gm2[i, i:j-1, j-1]))
-			
+			Qs[i, j] += 0.5*d2*np.trace(alpha_s(cp,deta*np.arange(i-1))[:, np.newaxis]*(Qs[:i-1, j-i-1:j] + 2*G2[:i-1, j-i-1:j]))
+
 			GmBu[i, i, j] = Qu[i, j]
 			for k in range(i+1, j+1):
 				GmBu[i, k, j] = GmBu[i, k-1, j-1] + Qu0[i, j] - Qu0[i, j-1]
@@ -234,8 +235,7 @@ def evolve(deta, eta_max, Nf=3.0, ICs='ones', coupling='fixed', s0=1.0):
 
 
 		if(np.mod(j, round(nsteps/10)) == 0):
-			now = datetime.now()
-			curr_time = now.strftime('%H:%M.%S')
+			curr_time = datetime.now().strftime('%H:%M.%S')
 			print(str(round((j/round(nsteps))*100,1))+'% done ('+curr_time+')')
 
 	return [Qu, Qd, Qs, G, G2, Qtu, Qtd, Qts, I3u, I3d, I3s, I3t, I4, I5, Itu, Itd, Its]
@@ -243,17 +243,16 @@ def evolve(deta, eta_max, Nf=3.0, ICs='ones', coupling='fixed', s0=1.0):
 
 
 
-
 if __name__ == '__main__':
 
-	output_dir = '/Users/brandonmanley/Desktop/PhD/moment_evolution/evolved_dipoles/largeNc&Nf/'
-	ICs_tag = 'basis'
+	output_dir = os.getcwd() + '/evolved_dipoles/'
 
 	eta_max = 15
-	deta = 0.05
+	deta = 0.5
+	nsteps = round(eta_max/deta)
 	Nf = 3
 
-	if round(eta_max/deta) > 800: raise ValueError('nsteps > 800 and will probably crash your computer')
+	if nsteps > 800: raise ValueError('nsteps > 800 and will probably crash your computer')
 
 	amps = ['Qu', 'Qd', 'Qs', 'G', 'G2', 'Qtu', 'Qtd', 'Qts', 
 			'I3u', 'I3d', 'I3s', 'I3t', 'I4', 'I5', 'Itu', 'Itd', 'Its']
@@ -261,16 +260,17 @@ if __name__ == '__main__':
 	for iamp, amp_name in enumerate(amps):
 		for ibasis in ['a', 'b', 'c']:
 			
-			print('--> nsteps:', round(eta_max/deta)) 
-			print('-> Staring (d, eta_max, Nf)=', deta, eta_max, Nf)
+			print('--> nsteps=', nsteps)
+			print('--> Staring (d, eta_max, Nf)=', deta, eta_max, Nf)
 
 			IC = [amp_name,  ibasis]
 			output = evolve(deta, eta_max, Nf = Nf, ICs = IC, coupling='running')
 
 			# save output
-			deta_str = 'd' + str(deta)[2:] + '_'
-			if not os.path.exists(output_dir+deta_str+ICs_tag): os.mkdir(output_dir+deta_str+ICs_tag)
-			for jamp in range(len(amps)): np.savetxt(output_dir+deta_str+ICs_tag+'/'+deta_str+'NcNf'+str(Nf)+'_'+amp_name+ibasis+'_'+amps[jamp]+'.dat', output[jamp])
+			deta_str = 'd' + str(deta)[2:]
+			if not os.path.exists(output_dir+deta_str): 
+				os.makedirs(output_dir+deta_str)
+			for jamp in range(len(amps)): np.savetxt(output_dir+deta_str+'/'+deta_str+'_NcNf'+str(Nf)+'_'+amp_name+ibasis+'_'+amps[jamp]+'.dat', output[jamp])
 			
 			print('--> wrote out amplitudes to', output_dir)
 			output = 0
