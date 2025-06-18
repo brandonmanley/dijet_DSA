@@ -10,7 +10,7 @@ import _pickle as cPickle
 import sys
 import zlib
 from dataclasses import dataclass, replace
-from scipy.integrate import quad,fixed_quad, nquad
+from scipy.integrate import quad,fixed_quad, nquad, simps
 
 from numpy.polynomial.legendre import leggauss
 
@@ -66,7 +66,7 @@ class DIJET:
 		replica = options.get('replica', 1)
 		self.lambdaIR = options.get('lambdaIR', 0.3)
 		self.deta = options.get('deta', 0.05)
-		self.gauss_param = options.get('gauss_param', 0.0)
+		self.IR_params = options.get('IR_reg', [None, 0.0])
 		fit_type = options.get('fit_type', 'pp')
 
 		# testing conditionals
@@ -366,8 +366,8 @@ class DIJET:
 
 
 		# need to regulate IR for small-moderate Q^2
-		if self.gauss_param > 0.0:
-			amp_values = regulate_IR(amp_values, r, ['gauss', self.gauss_param])
+		if self.IR_params[0] != None:
+			amp_values = regulate_IR(amp_values, r, self.IR_params)
 
 
 		# Compute the Riemann sum for each set of indices
@@ -378,8 +378,11 @@ class DIJET:
 			kv_term = kv(i_b, Qeff*r)
 
 			# Perform the sum
-			total_sum = np.sum(measure*c_term*d_term*jv_term*kv_term*amp_values)
-			# total_sum = measure*c_term*d_term*jv_term*kv_term*amp_values
+			integrand = measure*c_term*d_term*jv_term*kv_term*amp_values
+
+			# print(integrand)
+			total_sum = np.sum(integrand)
+			# total_sum = integrand
 			results.append(total_sum)
 
 		if len(indices_array) > 1: return results
@@ -426,9 +429,9 @@ class DIJET:
 			b_TT = 0.5*((1-2*z)**2)*N_01_10*(self.Zusq*Qu_11 + self.Zdsq*Qd_11 + self.Zssq*Qs_11)
 			b_TT += self.Zfsq*(z**2 + (1-z)**2)*N_01_10*G2_11
 			b_TT +=  N_11*(self.Zusq*(0.5*Qu_11 + I3u_11 - I3u_01_10) + self.Zdsq*(0.5*Qd_11 + I3d_11 - I3d_01_10) + self.Zssq*(0.5*Qs_11 + I3s_11 - I3s_01_10))
-			b_TT += (z**2 + (1-z)**2)*N_11*(self.Zusq*Qu_21_10 + self.Zdsq*Qd_21_10 + self.Zssq*Qs_21_10)
-			b_TT += (z**2 + (1-z)**2)*N_11*self.Zfsq*(2*G2_21_10 + I4_21_10 + I4_10_01 - I5_11 + I5_10_01 + I5_01_10)
-			return prefactor*(1-(2*z))*b_TT
+			b_TT -= (z**2 + (1-z)**2)*N_11*(self.Zusq*Qu_21_10 + self.Zdsq*Qd_21_10 + self.Zssq*Qs_21_10)
+			b_TT -= (z**2 + (1-z)**2)*N_11*self.Zfsq*(2*G2_21_10 + I4_21_10 + I4_10_01 - I5_11 + I5_10_01 + I5_01_10)
+			return -1*prefactor*(1-(2*z))*b_TT
 
 		elif flavor == 'A_LT':
 			Qu_11, Qu_00 = self.fourier_bessel(kvar, [[1,1,0,0], [0,0,0,0]], 'Qu')
@@ -477,10 +480,11 @@ class DIJET:
 			I5_11, I5_11_20, I5_10_01, I5_00_11, I5_11_11, I5_10_10, I5_00_20 = self.fourier_bessel(kvar, [[1,1,0,0], [1,1,2,0], [1,0,0,1], [0,0,1,1], [1,1,1,1], [1,0,1,0], [0,0,2,0]], 'I5')
 			N_00, N_11 = self.fourier_bessel(kvar, [[0,0,0,0], [1,1,0,0]], 'N')
 
-			c_LT = (z**2 + (1-z)**2)*N_11*(self.Zusq*Qu_11 + self.Zdsq*Qd_11 + self.Zssq*Qs_11)
+			# c_LT = (z**2 + (1-z)**2)*N_11*(self.Zusq*Qu_11 + self.Zdsq*Qd_11 + self.Zssq*Qs_11)
+			c_LT = (z**2 + (1-z)**2)*N_00*(self.Zusq*Qu_11 + self.Zdsq*Qd_11 + self.Zssq*Qs_11)
 			c_LT -= N_00*(self.Zusq*I3u_11 + self.Zdsq*I3d_11 + self.Zssq*I3s_11)
 			c_LT += 0.5*((1- 2*z)**2)*N_11*(self.Zusq*Qu_00 + self.Zdsq*Qd_00 + self.Zssq*Qs_00)
-			c_LT += ((1- 2*z)**2)*N_00*self.Zfsq*(G2_01_10 - 3*G2_11 - I4_10_10 - 2*I4_11 + 2*I4_01_10 - I4_11_20 - I4_10_01 + I4_00_11 + I5_11 - I5_11_20 - I5_10_01 + I5_00_11)
+			c_LT += ((1- 2*z)**2)*N_00*self.Zfsq*(G2_01_10 - 3*G2_11 - I4_10_10 - 2*I4_11 + I4_01_10 - I4_11_20 - I4_10_01 + I4_00_11 + I5_11 - I5_11_20 - I5_10_01 + I5_00_11)
 			c_LT += ((1- 2*z)**2)*N_11*self.Zfsq*(G2_10_10 + I4_11_11 + I4_00_20 + I5_11_11 - I5_10_10 + I5_00_20)
 
 			return prefactor*c_LT
@@ -491,7 +495,8 @@ class DIJET:
 
 		elif flavor == 'B_TT_unpolar':
 			N_11, N_21_10 = self.fourier_bessel(kvar, [[1,1,0,0], [2,1,1,0]], 'N')
-			return prefactor*2*(z-0.5)*(2*(N_11**2) - N_11*N_21_10)
+			# return prefactor*2*(z-0.5)*(2*(N_11**2) - N_11*N_21_10)
+			return prefactor*2*(z-0.5)*N_11*(N_11 - N_21_10)
 
 		elif flavor == 'A_LL_unpolar':
 			N_00 = self.fourier_bessel(kvar, [[0,0,0,0]], 'N')
@@ -506,8 +511,9 @@ class DIJET:
 			return prefactor*(N_11**2)
 
 		elif flavor == 'B_TmT_unpolar':
-			N_11, N_01_10 = self.fourier_bessel(kvar, [[1,1,0,0], [0,1,1,0]], 'N')
-			return prefactor*(z-0.5)*(-2*(N_11**2) + N_11*N_01_10)
+			N_11, N_21_10 = self.fourier_bessel(kvar, [[1,1,0,0], [2,1,1,0]], 'N')
+			# return prefactor*(z-0.5)*(-2*(N_11**2) + N_11*N_01_10)
+			return prefactor*2*(z-0.5)*N_11*(N_11 - N_21_10)
 
 		elif flavor == 'C_TmT_unpolar':
 			N_11 = self.fourier_bessel(kvar, [[1,1,0,0]], 'N')
@@ -738,11 +744,96 @@ class DIJET:
 								result += weight_factor * xsec_func(kinematics, weight=weight, diff='dy', kind=kind)
 
 			# other methods not implemented here since GL way outperforms them 
-			# elif method == 'riemann': pass 
-			# elif method == 'mc': pass
+			elif method == 'riemann':
+
+				if integrated['z']: 
+					z_values = np.linspace(*phase_space['z'], points)
+					dz = z_values[1]-z_values[0]
+				else:
+					z_values, dz = [phase_space['z']], 1
+
+				if integrated['y']:
+					y_values = np.linspace(*phase_space['y'], points)
+					dy = y_values[1]-y_values[0]
+				else:
+					y_values, dy = [phase_space['y']], 1
+
+				if integrated['t']:
+					t_values = np.linspace(*phase_space['t'], points)
+					dt = t_values[1]-t_values[0]
+				else:
+					t_values, dt = [phase_space['t']], 1
+
+				result = 0.0
+
+				for i, y in enumerate(y_values):
+					kinematics.y = y
+
+					if integrated['Q2']:
+						Q2_max = min(x0 * s * y, phase_space['Q2'][1])
+						if Q2_max < phase_space['Q2'][0]: continue
+						Q2_values = np.linspace(phase_space['Q2'][0], Q2_max, points)
+						dQ2 = Q2_values[1]-Q2_values[0]
+					else:
+						Q2_values, dQ2 = [phase_space['Q2']], 1
+
+					for j, Q2 in enumerate(Q2_values):
+						kinematics.Q = np.sqrt(Q2)
+						x = Q2 / (s * y)
+						kinematics.x = x
+
+						if x > 0.01: continue
+
+						for k, z in enumerate(z_values):
+							if np.sqrt(Q2) * np.sqrt(z * (1 - z)) < r0: continue
+							kinematics.z = z
+
+							for l, t in enumerate(t_values):
+								kinematics.delta = np.sqrt(t)
+
+								weight_factor = dy * dQ2 * dz * dt
+								result += weight_factor * xsec_func(kinematics, weight=weight, diff='dy', kind=kind)
+
+			elif method == 'mc':
+			
+				rng = np.random.default_rng()
+				ran_sum = 0
+				for i in range(points):
+					if integrated['y']:
+						kinematics.y = rng.uniform(*phase_space['y'])
+					else:
+						kinematics.y = phase_space['y']
+
+					if integrated['t']:
+						kinematics.delta = np.sqrt(rng.uniform(*phase_space['t']))
+					else:
+						kinematics.delta = np.sqrt(phase_space['t'])
+
+					if integrated['z']:
+						kinematics.z = rng.uniform(*phase_space['z'])
+					else:
+						kinematics.z = phase_space['z']
+
+					if integrated['Q2']:
+						kinematics.Q = np.sqrt(rng.uniform(*phase_space['Q2']))
+					else:
+						kinematics.Q = np.sqrt(phase_space['Q2'])
+
+					kinematics.x = (kinematics.Q**2)/(s*kinematics.y)
+
+					if kinematics.x > 0.01: continue
+					if np.sqrt((kinematics.Q**2)*kinematics.z*(1-kinematics.z)) < r0: continue
+
+					ran_sum += xsec_func(kinematics, weight=weight, diff='dy', kind=kind)
+
+				box_volume = 1
+				for var in ['y', 't', 'Q2', 'z']:
+					if integrated[var]: box_volume *= phase_space[var][1]-phase_space[var][0]
+
+				result = ran_sum*(1/points)*box_volume
+
 
 			results.append(result) 
-
 		return np.array(results)
 
 

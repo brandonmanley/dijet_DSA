@@ -625,7 +625,7 @@ if __name__ == '__main__':
 
 	wdir = 'dipoles'
 	Nc = 3.0
-	deta = 0.5
+	deta = 0.025
 	eta_max = 15.0
 	x0 = 0.1
 	eta0 = np.sqrt(Nc/(2*np.pi))*np.log(1/x0)

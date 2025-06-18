@@ -30,10 +30,28 @@ def find_params(irep, Q2=10, fit='pp'):
 			return irep, guess
 
 
+def save_params(params, filename):
+
+	# reformat and save parameters
+	pars = {'pp': []}
+	header = ['nrep'] + [f'{amp}{basis}' for amp in ['I3u', 'I3d', 'I3s', 'I3T', 'I4', 'I5'] for basis in ['eta', 's10', '1']]
+	header_str = ",".join(header)
+
+	for irep in range(len(params['pp'])):
+		for fit in ['pp']:
+			params = []
+			for amp in ['I3u', 'I3d', 'I3s', 'I3T', 'I4', 'I5']:
+				for basis in ['eta', 's10', '1']:
+					params.append(mparams[fit][irep][amp][basis])
+			pars[fit].append([irep+1] + params)
+
+	np.savetxt(filename, pars['pp'], delimiter=",", header=header_str, comments='')
+
+
 if __name__ == '__main__':
 
 	Q2 = 10
-	n_replicas = 300  # or up to 397
+	n_replicas = 100  # or up to 397
 	fit = 'pp'
 
 	results = []
@@ -47,4 +65,8 @@ if __name__ == '__main__':
 	# organize into mparams dict
 	mparams = {fit: [guess for _, guess in sorted(results)]}
 
-	print(mparams)
+	save_params(mparams, 'test_params.csv')
+
+
+
+
