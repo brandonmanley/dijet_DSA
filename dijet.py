@@ -36,6 +36,8 @@ def regulate_IR(values, r, params):
 		values *= np.exp(-(r**2)*params[1])
 	elif params[0] == 'skin':
 		values *= 1.0/(1 + np.exp(params[1]*((r/params[2]) - 1)))
+	elif params[0] == 'exp':
+		values *= np.exp(-r*params[1])
 	return values
 
 
@@ -159,11 +161,11 @@ class DIJET:
 
 		if fit_type == 'dis':
 			params_file = '/dipoles/replica_params_dis.csv'
-			mom_params_file = '/dipoles/moment_params_dis.csv'
+			mom_params_file = '/dipoles/moment_params_dis_oam3_range10.csv'
 
 		elif fit_type == 'pp':
 			params_file = '/dipoles/replica_params_pp.csv'
-			mom_params_file = '/dipoles/moment_params_pp.csv'
+			mom_params_file = '/dipoles/moment_params_pp_oam3_range10.csv'
 
 		elif fit_type == 'ones':
 			params_file = '/dipoles/replica_params_ones.csv'
@@ -365,8 +367,16 @@ class DIJET:
 
 
 		# need to regulate IR for small-moderate Q^2
-		if self.IR_params[0] != None:
-			amp_values = regulate_IR(amp_values, r, self.IR_params)
+		# if self.IR_params[0] != None:
+			# amp_values = regulate_IR(amp_values, r, self.IR_params)
+
+		ir_term = np.ones_like(r)
+		if self.IR_params[0] == 'gauss':
+			ir_term = np.exp(-(r**2)*self.IR_params[1])
+		elif self.IR_params[0] == 'skin':
+			ir_term = 1.0/(1 + np.exp(self.IR_params[1]*((r/self.IR_params[2]) - 1)))
+		elif self.IR_params[0] == 'exp':
+			ir_term = np.exp(-r*self.IR_params[1])
 
 
 		# Compute the Riemann sum for each set of indices
@@ -377,11 +387,10 @@ class DIJET:
 			kv_term = kv(i_b, Qeff*r)
 
 			# Perform the sum
-			integrand = measure*c_term*d_term*jv_term*kv_term*amp_values
+			integrand = measure*c_term*d_term*jv_term*kv_term*amp_values*ir_term
 
 			# print(integrand)
 			total_sum = np.sum(integrand)
-			# total_sum = integrand
 			results.append(total_sum)
 
 		if len(indices_array) > 1: return results
@@ -571,56 +580,49 @@ class DIJET:
 
 		Q, x, y, z, pT, delta = kinematics.Q, kinematics.x, kinematics.y, kinematics.z, kinematics.pT, kinematics.delta
 
-		# print(Q, x, y, z, pT, delta)
 		if kind == 'num':
 
-			# prefactor = self.alpha_em/(4*(np.pi**2)*(Q**2))
-			prefactor = 1
+			prefactor = self.alpha_em/(4*(np.pi**2)*(Q**2))
 			if diff == 'dx': prefactor *= (0.25*pT*y)/(x*z*(1-z))
 			elif diff == 'dy': prefactor *= (0.25*pT)/(z*(1-z))
 			else: raise ValueError('diff should be dx or dy')
 
 			if weight == '1':
-				tt_term = y*(2-y) * self.get_coeff('A_TT', kinematics)
-				# tt_term = self.get_coeff('A_TT', kinematics)
-				# tt_term = 1
+				tt_term = (2-y) * self.get_coeff('A_TT', kinematics)
 				lt_term = 0
-				# prefactor *= 8*(np.pi**3)
-
-				# numer = (0.25*(pperp/(z*(1-z))))*y*(2-y)*CTT_norm(x, z, Q, pperp, quark_list)  
+				prefactor *= 8*(np.pi**3)
 
 			elif weight == 'cos(phi_Dp)':
 				tt_term = (2-y) * (delta/pT) * self.get_coeff('B_TT', kinematics)
 				lt_term = 0
-				# prefactor *= 4*(np.pi**3)
+				prefactor *= 4*(np.pi**3)
 
 			elif weight == 'cos(phi_Dp)cos(phi_kp)' or weight == 'cos(phi_kp)cos(phi_Dp)':
 				tt_term = 0
 				lt_term = np.sqrt(2-2*y) * (delta/pT) * self.get_coeff('B_LT', kinematics)
-				# prefactor *= 2*(np.pi**3)
+				prefactor *= 2*(np.pi**3)
 
 			elif weight == 'sin(phi_Dp)sin(phi_kp)' or weight == 'sin(phi_kp)sin(phi_Dp)':
 				tt_term = 0
 				lt_term = np.sqrt(2-2*y) * (delta/pT) * self.get_coeff('C_LT', kinematics)
-				# prefactor *= 2*(np.pi**3)
+				prefactor *= 2*(np.pi**3)
 
 			elif weight == 'cos(phi_kp)':
 				tt_term = 0
 				lt_term = np.sqrt(2-2*y) * self.get_coeff('A_LT', kinematics)
-				# prefactor *= 4*(np.pi**3)
+				prefactor *= 4*(np.pi**3)
 
 			else:
 				raise ValueError(f'weight {weight} not recognized')
 
 			xsec = prefactor*(tt_term + lt_term)
-			# xsec *= 0.3894*(10**12) # convert to fb
+			xsec *= 0.3894*(10**12) # convert to fb
 			# xsec *= 0.3894*(10**9) # convert to pb
 			return xsec
 
 		elif kind == 'den':
 
-			# prefactor = self.alpha_em/(4*(np.pi**2)*(Q**2)*y)
-			prefactor = 1
+			prefactor = self.alpha_em/(4*(np.pi**2)*(Q**2)*y)
 			if diff == 'dx': prefactor *= (0.25*pT*y)/(x*z*(1-z))
 			elif diff == 'dy': prefactor *= (0.25*pT)/(z*(1-z))
 			else: raise ValueError('diff should be dx or dy')
@@ -629,37 +631,37 @@ class DIJET:
 				tt_term =  (1 + (1-y)**2) * self.get_coeff('A_TT_unpolar', kinematics)
 				tmt_term = 0
 				ll_term = 4*(1-y)* self.get_coeff('A_LL_unpolar', kinematics)
-				# prefactor *= 8*(np.pi**3)
+				prefactor *= 8*(np.pi**3)
 
 			elif weight == 'cos(phi_Dp)':
 				tt_term = (1 + (1-y)**2) * (delta/pT) * self.get_coeff('B_TT_unpolar', kinematics)
 				tmt_term = 0
 				ll_term = 4*(1-y)* (delta/pT)* self.get_coeff('B_LL_unpolar', kinematics)
-				# prefactor *= 4*(np.pi**3)
+				prefactor *= 4*(np.pi**3)
 
 			elif weight == 'cos(2*phi_kp)':
 				tt_term = 0
 				tmt_term = -2*(1-y) * self.get_coeff('A_TmT_unpolar', kinematics)
 				ll_term = 0
-				# prefactor *= 4*(np.pi**3)
+				prefactor *= 4*(np.pi**3)
 
 			elif weight == 'cos(phi_Dp)cos(2*phi_kp)' or weight == 'cos(2*phi_kp)cos(phi_Dp)':
 				tt_term = 0
 				tmt_term = -2*(1-y)* (delta/pT) * self.get_coeff('B_TmT_unpolar', kinematics)
 				ll_term = 0
-				# prefactor *= 2*(np.pi**3)
+				prefactor *= 2*(np.pi**3)
 
 			elif weight == 'sin(phi_Dp)sin(2*phi_kp)' or weight == 'sin(2*phi_kp)sin(phi_Dp)':
 				tt_term = 0
 				tmt_term = -2*(1-y)* (delta/pT) * self.get_coeff('C_TmT_unpolar', kinematics)
 				ll_term = 0
-				# prefactor *= 2*(np.pi**3)
+				prefactor *= 2*(np.pi**3)
 
 			else:
 				raise ValueError(f'weight {weight} not recognized')
 
 			xsec = prefactor*(tt_term + tmt_term + ll_term)
-			# xsec *= 0.3894*(10**12) # convert to fb
+			xsec *= 0.3894*(10**12) # convert to fb
 			# xsec *= 0.3894*(10**9) # convert to pb
 			return xsec
 
@@ -752,7 +754,6 @@ class DIJET:
 
 								weight_factor = y_w[i] * Q2_w[j] * z_w[k] * t_w[l]
 
-								# print(kinematics.x)
 								result += weight_factor * xsec_func(kinematics, weight=weight, diff='dy', kind=kind)
 
 
@@ -1007,32 +1008,9 @@ class DIJET:
 			raise ValueError(f'dont know {kind}')
 
 		return ifunc(xmax)
-
-
-def compute_row(args):
-	phi_Dp, phi_kp, test_kins, space = args
-
-	# Create a local DIJET instance inside each process
-	dj_local = DIJET(1, constrained_moments=True)
-	dj_local.load_params('replica_params_pp.csv')
-	dj_local.set_params(4)
-
-	# Local copy of space for thread-safety
-	local_space = space.copy()
-	local_space['phi_Dp'] = phi_Dp
-	local_space['phi_kp'] = phi_kp
-
-	sigma_num = dj_local.get_integrated_xsec(test_kins.pT, test_kins.s, local_space, points=7, kind='num')
-	sigma_den = dj_local.get_integrated_xsec(test_kins.pT, test_kins.s, local_space, points=7, kind='den')
-
-	print(phi_Dp, phi_kp)
-
-	return [phi_Dp, phi_kp, sigma_num, sigma_den]
-
 	
 
 if __name__ == '__main__':
-	import time
 
 	test_kins = Kinematics()
 	test_kins.x = 0.01
@@ -1067,20 +1045,6 @@ if __name__ == '__main__':
 	test_num = dj.get_integrated_xsec([test_kins.pT], test_kins.s, space, weight='1', points=7, kind='num')
 
 	print(test_num, test_den, test_num/test_den)
-
-
-	# den_array = []
-	# for weight in ['1', 'cos(2*phi_kp)', 'cos(phi_Dp)', 'cos(phi_Dp)cos(2*phi_kp)', 'sin(phi_Dp)sin(2*phi_kp)']:
-	# 	sigma_den = dj.get_integrated_xsec(test_kins.pT, test_kins.s, space, weight=weight, points=7, kind='den')
-	# 	den_array.append(round(sigma_den, 2))
-
-	# num_array = []
-	# for weight in ['1', 'cos(phi_Dp)', 'cos(phi_Dp)cos(phi_kp)', 'sin(phi_Dp)sin(phi_kp)']:
-	# 	sigma_num = dj.get_integrated_xsec(test_kins.pT, test_kins.s, space, weight=weight, points=7, kind='num')
-	# 	num_array.append(round(sigma_num, 2))
-
-	# print(', '.join(str(inum) for inum in np.array(num_array)))
-	# print(', '.join(str(iden) for iden in np.array(den_array)))
 	
 
 
