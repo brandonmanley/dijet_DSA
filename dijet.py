@@ -10,7 +10,7 @@ import _pickle as cPickle
 import sys
 import zlib
 from dataclasses import dataclass, replace
-from scipy.integrate import quad,fixed_quad, nquad, simps
+from scipy.integrate import quad,fixed_quad, nquad
 
 from numpy.polynomial.legendre import leggauss
 
