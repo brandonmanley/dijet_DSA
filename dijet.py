@@ -97,7 +97,11 @@ class DIJET:
 		self.current_dir = os.path.dirname(os.path.abspath(__file__))
 
 		self.load_dipoles()
-		self.load_params(fit_type)
+
+		if self.constrained_moments: moments = ''
+		else: moments = 'random'
+
+		self.load_params(fit_type, moments=moments)
 		self.set_params(replica)
 
 
