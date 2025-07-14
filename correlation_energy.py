@@ -17,7 +17,7 @@ if __name__ == '__main__':
 		'phi_kp': [0, 2*np.pi]
 	}
 	pT_values = [3.0]
-	roots_values = np.linspace(45, 140, 5)
+	roots_values = np.linspace(45, 140, 20)
 
 	replicas = {}
 	replicas['space'] = space
