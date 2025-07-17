@@ -70,6 +70,7 @@ class DIJET:
 		self.deta = options.get('deta', 0.05)
 		self.IR_params = options.get('IR_reg', [None, 0.0])
 		fit_type = options.get('fit_type', 'pp')
+		self.nucleon = options.get('nucleon', 'p')
 
 		# testing conditionals
 		self.mv_only = options.get('mv_only', False)
@@ -89,8 +90,14 @@ class DIJET:
 		self.alpha_em = 1/137.0
 		self.Nc = 3.0
 		self.Nf = 3.0
-		self.Zusq = 4.0/9.0
-		self.Zdsq = 1.0/9.0
+		if self.nucleon == 'p':
+			self.Zusq = 4.0/9.0
+			self.Zdsq = 1.0/9.0
+		elif self.nucleon == 'n':
+			self.Zusq = 1.0/9.0
+			self.Zdsq = 4.0/9.0 
+		else:
+			raise ValueError('Error: do not recognize nucleon', self.nucleon)
 		self.Zssq = 1.0/9.0
 		self.Zfsq = self.Zusq + self.Zdsq + self.Zssq
 
