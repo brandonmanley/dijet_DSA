@@ -49,8 +49,8 @@ def save_params(params, filename):
 if __name__ == '__main__':
 
 	Q2 = 10
-	n_replicas = 50  # or up to 397
-	rep_range = 30
+	n_replicas = 200  # or up to 397
+	rep_range = 10
 	oam_limit = 3
 	fit = 'pp'
 
@@ -63,13 +63,13 @@ if __name__ == '__main__':
 		futures = [executor.submit(find_params, irep, Q2, fit, oam_limit, rep_range) for irep in range(1, n_replicas + 1)]
 		for future in concurrent.futures.as_completed(futures):
 			irep, guess = future.result()
-			print(f'Finished replica {irep}')
+			print(f'Finished replica {irep} ({len(results)}/{n_replicas} done)')
 			results.append((irep, guess))
 
 	# organize into mparams dict
 	mparams = {fit: [guess for _, guess in sorted(results)]}
 
-	save_params(mparams, 'dipoles/moment_params_oam3_range30.csv')
+	save_params(mparams, 'dipoles/moment_params_oam3_range10_200reps.csv')
 
 
 
