@@ -176,7 +176,7 @@ class DIJET:
 
 		elif fit_type == 'pp':
 			params_file = '/dipoles/replica_params_pp.csv'
-			mom_params_file = '/dipoles/moment_params_pp_oam3_range10.csv'
+			mom_params_file = '/dipoles/moment_params_pp_oam3_range10_200reps.csv'
 
 		elif fit_type == 'ones':
 			params_file = '/dipoles/replica_params_ones.csv'
