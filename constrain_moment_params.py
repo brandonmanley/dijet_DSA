@@ -49,7 +49,7 @@ def save_params(params, filename):
 if __name__ == '__main__':
 
 	Q2 = 10
-	n_replicas = 200  # or up to 397
+	n_replicas = 300  # or up to 397
 	rep_range = 10
 	oam_limit = 3
 	fit = 'pp'
@@ -69,7 +69,7 @@ if __name__ == '__main__':
 	# organize into mparams dict
 	mparams = {fit: [guess for _, guess in sorted(results)]}
 
-	save_params(mparams, 'dipoles/moment_params_oam3_range10_200reps.csv')
+	save_params(mparams, 'dipoles/moment_params_oam3_range10_300reps_largeNcq.csv')
 
 
 

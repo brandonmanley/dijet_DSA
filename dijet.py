@@ -66,7 +66,7 @@ class DIJET:
 
 		# define optional parameters
 		replica = options.get('replica', 1)
-		self.lambdaIR = options.get('lambdaIR', 0.3)
+		self.lambdaIR = options.get('lambdaIR', 0.4)
 		self.deta = options.get('deta', 0.05)
 		self.IR_params = options.get('IR_reg', [None, 0.0])
 		fit_type = options.get('fit_type', 'pp')
@@ -116,7 +116,8 @@ class DIJET:
 
 		#-- load polarized dipole amplitudes
 		deta_str = 'd'+str(self.deta)[2:]
-		polar_indir = f'/dipoles/{deta_str}-rc/'
+		# polar_indir = f'/dipoles/{deta_str}-rc/'
+		polar_indir = f'/dipoles/{deta_str}-rc-L0.4-largeNcq/'
 		amps = ['Qu', 'Qd', 'Qs', 'GT', 'G2', 'I3u', 'I3d', 'I3s', 'I3T', 'I4', 'I5']
 
 		if self.corrected_evo:
@@ -156,8 +157,8 @@ class DIJET:
 
 		self.ndipole = np.loadtxt(unpolar_input_file)
 
-		print('--> loaded unpol. amp. data from', unpolar_file)
-		print('--> loaded pol. amp. data from', polar_indir)
+		# print('--> loaded unpol. amp. data from', unpolar_file)
+		# print('--> loaded pol. amp. data from', polar_indir)
 
 		# grid values for dipoles
 		n_psteps = len(self.basis_dipoles['Qu']['Qu']['eta'])
@@ -176,7 +177,8 @@ class DIJET:
 
 		elif fit_type == 'pp':
 			params_file = '/dipoles/replica_params_pp.csv'
-			mom_params_file = '/dipoles/moment_params_pp_oam3_range10_200reps.csv'
+			# mom_params_file = '/dipoles/moment_params_pp_oam3_range10_200reps.csv'
+			mom_params_file = '/dipoles/moment_params_pp_oam3_range10_300reps_largeNcq.csv'
 
 		elif fit_type == 'ones':
 			params_file = '/dipoles/replica_params_ones.csv'
@@ -196,8 +198,8 @@ class DIJET:
 		self.params = fdf
 		self.mom_params = pd.read_csv(self.current_dir + mom_params_file)
 
-		print('--> loaded params from', params_file)
-		print('--> loaded random moment params from', mom_params_file)
+		# print('--> loaded params from', params_file)
+		# print('--> loaded random moment params from', mom_params_file)
 
 
 		# if self.corrected_evo:
@@ -1001,7 +1003,7 @@ class DIJET:
 
 
 	def get_IntegratedPDF(self, kind, Q2, xmin=10**(-5), xmax=0.1):
-		npoints = 10
+		npoints = 20
 
 		if kind == 'Lq':
 			ifunc = lambda xm: fixed_quad(np.vectorize(lambda x: self.get_Lsinglet(x, Q2)), xmin, xm, n=npoints)[0]
