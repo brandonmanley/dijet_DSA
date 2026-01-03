@@ -29,28 +29,33 @@ if __name__ == '__main__':
 	os.makedirs(args.outdir, exist_ok=True)
 
 	######## OPTIONS ############
-	IR_reg = ['gauss', 1.0]
+	IR_reg = ['gauss', 1.5]
 	fit = 'pp'
 
-	roots = 50
+	roots = 40
 	pT_values = np.linspace(0.5, 10, 20)
 	space = {
 		'y': [0.05, 0.95],
 		'z': [0.2, 0.5],
+		# 'z': 0.5,
 		'Q2': [16, 100],
+		# 't': [0.05, 0.1],
 		't': 0.1,
 		'phi_Dp': [0, 2*np.pi],
 		'phi_kp': [0, 2*np.pi]
 	}
 	r0 = 0.5
-	npoints = 4
+	npoints = 5
 	nreps = 300
+	lambdaIR = 0.5
+	lambdaFB = 0.5
 
 	############################
 
 	print('Chosen options -------------------------------------')
 	print('IR regulator:', IR_reg)
 	print('Kinematic regulator Q0:', r0)
+	print('Lambda:', lambdaIR)
 	print('fit parameters:', fit)
 	print('root s:', roots)
 	print('pT values:', pT_values)
@@ -61,8 +66,8 @@ if __name__ == '__main__':
 
 
 	djs = {}
-	djs['p'] = dijet.DIJET(fit_type=fit, constrained_moments=True, IR_reg=IR_reg, nucleon='p')
-	djs['n'] = dijet.DIJET(fit_type=fit, constrained_moments=True, IR_reg=IR_reg, nucleon='n')
+	djs['p'] = dijet.DIJET(fit_type=fit, constrained_moments=True, IR_reg=IR_reg, nucleon='p', lambdaIR=lambdaIR)
+	djs['n'] = dijet.DIJET(fit_type=fit, constrained_moments=True, IR_reg=IR_reg, nucleon='n', lambdaIR=lambdaIR)
 	modes = ['p', 'n']
 
 	replicas = {key: [] for key in modes}
@@ -81,7 +86,7 @@ if __name__ == '__main__':
 	if test: teststr = '_test'
 	else: teststr = ''
 
-	outfile = f'{args.outdir}/dsa_p{tstr}{zstr}_rs{roots}_Q0{r0str}_xi{xistr}_pn_{repstr}reps_largeNcq{teststr}.npy'
+	outfile = f'{args.outdir}/dsa_p{tstr}{zstr}_rs{roots}_Q0{r0str}_xi{xistr}_pn_{repstr}reps_largeNcq{teststr}_pp_constrained.npy'
 
 	print('')
 	print('===> starting replica loop, outgoing file is', outfile)

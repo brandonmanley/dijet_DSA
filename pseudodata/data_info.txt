@@ -1,0 +1,67 @@
+Pseudo-data classification
+
+3100, 3101, 3102, 3010, 3011, 3012, 4100, 4101, 4102, 4010, 4011, 4012:
+- Files separated by target
+- 3xxx = p, t, z
+- 4xxxx = p, t
+- xxx0 = proton
+- xxx1 = deuteron
+- xxx2 = helium-3
+- x1xx = 100 fb^{-1}
+- x0xx = 10 fb^{-1} 
+- Combined OAM less than 3
+- mean of replicas
+
+1000 - 2241: 
+- Files separated by target and correlation
+- 1xxx = p, t
+- 2xxx = p,t,z 
+- xTxx = target (0 - proton, 1 - deuteron, 2 - helium-3)
+- xxCx = correlation (0 - 1, 1 - <cosTT>, 2 - <cosLT>, 3 - <coscos>, 4 - <sinsin>)
+- xxxL = lumi (0 - 100 fb^{-1} , 1 -10 fb^{-1})
+- Combined OAM less than 3
+- mean of replicas
+
+6000 - 7241: 
+- Files separated by target and correlation
+- 6xxx = p, t
+- 7xxx = p,t,z 
+- xTxx = target (0 - proton, 1 - deuteron, 2 - helium-3)
+- xxCx = correlation (0 - 1, 1 - <cosTT>, 2 - <cosLT>, 3 - <coscos>, 4 - <sinsin>)
+- xxxL = lumi (0 - 100 fb^{-1} , 1 -10 fb^{-1})
+- Combined OAM less than 3
+- replica number 1 as the data values
+
+
+9000 - 9241:
+- Files separated by target and correlation
+- 9xxx = p,t,z 
+- xTxx = target (0 - proton, 1 - deuteron, 2 - helium-3)
+- xxCx = correlation (0 - 1, 1 - <cosTT>, 2 - <cosLT>, 3 - <coscos>, 4 - <sinsin>)
+- xxxL = lumi (0 - 100 fb^{-1} , 1 -10 fb^{-1})
+- Each OAM less than 1
+- mean of replicas
+
+
+10000 - 10241:
+- Files separated by target and correlation
+- 10xxx = p,t,z 
+- xTxx = target (0 - proton, 1 - deuteron, 2 - helium-3)
+- xxCx = correlation (0 - 1, 1 - <cosTT>, 2 - <cosLT>, 3 - <coscos>, 4 - <sinsin>)
+- xxxL = lumi (0 - 100 fb^{-1} , 1 -10 fb^{-1})
+- Combined OAM less than 3
+- mean of replicas
+- pT < 5 GeV
+
+
+11000 - 11241:
+- Files separated by target and correlation
+- 11xxx = p,t,z 
+- xTxx = target (0 - proton, 1 - deuteron, 2 - helium-3)
+- xxCx = correlation (0 - 1, 1 - <cosTT>, 2 - <cosLT>, 3 - <coscos>, 4 - <sinsin>)
+- xxxL = lumi (0 - 100 fb^{-1} , 1 -10 fb^{-1})
+- Combined OAM less than 3
+- mean of replicas
+- pT > 5 GeV
+
+

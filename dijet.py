@@ -66,7 +66,8 @@ class DIJET:
 
 		# define optional parameters
 		replica = options.get('replica', 1)
-		self.lambdaIR = options.get('lambdaIR', 0.4)
+		self.lambdaIR = options.get('lambdaIR', 1.0) # IR cutoff in evolution/PDF calcualtion
+		# self.lambdaFB = options.get('lambdaFB', 1.0) # IR cutoff in FB transform
 		self.deta = options.get('deta', 0.05)
 		self.IR_params = options.get('IR_reg', [None, 0.0])
 		fit_type = options.get('fit_type', 'pp')
@@ -78,6 +79,10 @@ class DIJET:
 		self.old_rap = options.get('old_rap', False)
 		self.corrected_evo = options.get('corrected_evo', False)
 		self.constrained_moments = options.get('constrained_moments', False)
+		self.only_tt = options.get('only_tt', False)
+		self.only_ll = options.get('only_ll', False)
+		self.no_dipole = options.get('no_dipole', False)
+
 
 		# warn about testing conditionals
 		if self.mv_only: print('--> !!! Using only initial conditions for N!')
@@ -85,6 +90,9 @@ class DIJET:
 		if self.old_rap: print('--> !!! Using ln(1/x) in argument of N!')
 		if self.corrected_evo: print('--> !!! Using corrected evolution!')
 		if self.constrained_moments: print('--> !!! Using constrained moment parameters!')
+		if self.only_tt: print('--> !! only using transverse term in unpolarized cross section!!')
+		if self.only_ll: print('--> !! only using longitudinal term in unpolarized cross section!!')
+		if self.no_dipole: print('--> !! turning off dipole N in fb transform!!')
 
 		# define physical constants
 		self.alpha_em = 1/137.0
@@ -117,7 +125,8 @@ class DIJET:
 		#-- load polarized dipole amplitudes
 		deta_str = 'd'+str(self.deta)[2:]
 		# polar_indir = f'/dipoles/{deta_str}-rc/'
-		polar_indir = f'/dipoles/{deta_str}-rc-L0.4-largeNcq/'
+		# polar_indir = f'/dipoles/{deta_str}-rc-L0.4-largeNcq/'
+		polar_indir = f'/dipoles/{deta_str}-rc-largeNcq/'
 		amps = ['Qu', 'Qd', 'Qs', 'GT', 'G2', 'I3u', 'I3d', 'I3s', 'I3T', 'I4', 'I5']
 
 		if self.corrected_evo:
@@ -178,7 +187,9 @@ class DIJET:
 		elif fit_type == 'pp':
 			params_file = '/dipoles/replica_params_pp.csv'
 			# mom_params_file = '/dipoles/moment_params_pp_oam3_range10_200reps.csv'
-			mom_params_file = '/dipoles/moment_params_pp_oam3_range10_300reps_largeNcq.csv'
+			# mom_params_file = '/dipoles/moment_params_pp_oam3_range10_300reps_largeNcq.csv'
+			mom_params_file = '/dipoles/moment_params_pp_oam1_range15_404reps.csv'
+			# mom_params_file = '/dipoles/moment_params_sr_constrained.csv'
 
 		elif fit_type == 'ones':
 			params_file = '/dipoles/replica_params_ones.csv'
@@ -187,6 +198,9 @@ class DIJET:
 		elif fit_type == 'one_basis':
 			params_file = '/dipoles/replica_params_one_basis.csv'
 			mom_params_file = '/dipoles/moment_params_zeros.csv'
+		
+		else:
+			raise ValueError(f'Do not recognize fit type: {fit_type}')
 
 		if options.get('moments', '') == 'random':
 			mom_params_file = '/dipoles/random_moment_params.csv'
@@ -366,6 +380,8 @@ class DIJET:
 			if target_eta_index < 0: raise ValueError(f"requested Y={target_eta} does not exist in N")
 			amp_values = self.normN*self.ndipole[target_eta_index, :maxr_index]
 
+			if self.no_dipole: amp_values = self.normN*np.ones_like(self.ndipole[target_eta_index, :maxr_index])
+
 
 		# polarized dipoles
 		else:
@@ -378,7 +394,6 @@ class DIJET:
 			if target_eta_index < 0: raise ValueError(f"requested Y={target_eta} does not exist in {amp}")
 			amp_values = self.pdipoles[amp][:, target_eta_index]
 
-
 		# need to regulate IR for small-moderate Q^2
 		# if self.IR_params[0] != None:
 			# amp_values = regulate_IR(amp_values, r, self.IR_params)
@@ -390,7 +405,6 @@ class DIJET:
 			ir_term = 1.0/(1 + np.exp(self.IR_params[1]*((r/self.IR_params[2]) - 1)))
 		elif self.IR_params[0] == 'exp':
 			ir_term = np.exp(-r*self.IR_params[1])
-
 
 		# Compute the Riemann sum for each set of indices
 		for i_a, i_b, i_c, i_d in indices_array:
@@ -644,6 +658,10 @@ class DIJET:
 				tt_term =  (1 + (1-y)**2) * self.get_coeff('A_TT_unpolar', kinematics)
 				tmt_term = 0
 				ll_term = 4*(1-y)* self.get_coeff('A_LL_unpolar', kinematics)
+
+				if self.only_tt: ll_term = 0
+				if self.only_ll: tt_term = 0
+				
 				prefactor *= 8*(np.pi**3)
 
 			elif weight == 'cos(phi_Dp)':
@@ -1042,7 +1060,7 @@ if __name__ == '__main__':
 
 	space = {
 		'y' : [0.05, 0.95],
-		'z' : [0.2, 0.5],
+		'z' : 0.5,
 		'Q2' : [16, 100],
 		# 't' : [0.01, 0.04],
 		't' : 0.04,
@@ -1050,15 +1068,15 @@ if __name__ == '__main__':
 		'phi_kp' : [0, 2*np.pi]
 	}
 
-	dj = DIJET(1, constrained_moments=True)
-	dj.load_params('replica_params_pp.csv')
+	dj = DIJET(constrained_moments=True)
+	dj.load_params(fit_type='pp')
 	dj.set_params(4)
 
 	test_den = dj.get_integrated_xsec([test_kins.pT], test_kins.s, space, weight='1', points=7, kind='den')
-	test_num = dj.get_integrated_xsec([test_kins.pT], test_kins.s, space, weight='1', points=7, kind='num')
+	for harm in ['1', 'cos(phi_kp)', 'cos(phi_Dp)', 'cos(phi_Dp)cos(phi_kp)', 'sin(phi_Dp)sin(phi_kp)']:
+		test_num = dj.get_integrated_xsec([test_kins.pT], test_kins.s, space, weight=harm, points=7, kind='num')
+		print(harm, test_num, test_den, test_num/test_den)
 
-	print(test_num, test_den, test_num/test_den)
-	
 
 
 

@@ -1,0 +1,134 @@
+(* Content-type: application/vnd.wolfram.mathematica *)
+
+(*** Wolfram Notebook File ***)
+(* http://www.wolfram.com/nb *)
+
+(* CreatedBy='Wolfram 14.2' *)
+
+(*CacheID: 234*)
+(* Internal cache information:
+NotebookFileLineBreakTest
+NotebookFileLineBreakTest
+NotebookDataPosition[       154,          7]
+NotebookDataLength[      4705,        124]
+NotebookOptionsPosition[      4225,        107]
+NotebookOutlinePosition[      4619,        123]
+CellTagsIndexPosition[      4576,        120]
+WindowFrame->Normal*)
+
+(* Beginning of Notebook Content *)
+Notebook[{
+
+Cell[CellGroupData[{
+Cell[BoxData[{
+ RowBox[{
+  RowBox[{"ymin", " ", "=", " ", "0.05"}], ";"}], "\[IndentingNewLine]", 
+ RowBox[{
+  RowBox[{
+   RowBox[{"ymax", " ", "=", " ", "0.95"}], ";"}], "\[IndentingNewLine]"}], "\[IndentingNewLine]", 
+ RowBox[{
+  RowBox[{
+   RowBox[{"s", " ", "=", 
+    SuperscriptBox["140", "2"]}], ";"}], "\[IndentingNewLine]"}], "\[IndentingNewLine]", 
+ RowBox[{"Manipulate", "[", 
+  RowBox[{
+   RowBox[{"LogLogPlot", "[", 
+    RowBox[{
+     RowBox[{"{", 
+      RowBox[{
+       RowBox[{"x", " ", "ymin", " ", "s"}], ",", 
+       RowBox[{"x", " ", "ymax", " ", "s"}], ",", " ", "1", ",", " ", "100"}],
+       "}"}], ",", 
+     RowBox[{"{", 
+      RowBox[{"x", ",", 
+       SuperscriptBox["10", 
+        RowBox[{"-", "3"}]], ",", " ", "0.1"}], "}"}], ",", 
+     RowBox[{"Filling", "->", 
+      RowBox[{"{", 
+       RowBox[{"1", "->", 
+        RowBox[{"{", "2", "}"}]}], "}"}]}], ",", "\[IndentingNewLine]", " ", 
+     RowBox[{"PlotRange", "->", 
+      RowBox[{"{", 
+       RowBox[{"0", ",", " ", "120"}], "}"}]}]}], "]"}], ",", " ", 
+   RowBox[{"{", 
+    RowBox[{"s", ",", " ", 
+     SuperscriptBox["40", "2"], ",", " ", 
+     SuperscriptBox["140", "2"]}], "}"}]}], 
+  "]"}], "\[IndentingNewLine]"}], "Input",
+ CellChangeTimes->{{3.969696030839549*^9, 3.969696039423922*^9}, {
+  3.969696214155589*^9, 3.969696234493598*^9}, {3.969696287543347*^9, 
+  3.969696398777319*^9}, {3.969696442097167*^9, 3.969696561051243*^9}},
+ CellLabel->
+  "In[102]:=",ExpressionUUID->"ac8a8f11-6dfb-4ada-b2d7-2276a25917b0"],
+
+Cell[BoxData[
+ TagBox[
+  StyleBox[
+   DynamicModuleBox[{$CellContext`s$$ = 9840., Typeset`show$$ = True, 
+    Typeset`bookmarkList$$ = {}, Typeset`bookmarkMode$$ = "Menu", 
+    Typeset`animator$$, Typeset`animvar$$ = 1, Typeset`name$$ = 
+    "\"untitled\"", Typeset`specs$$ = {{
+      Hold[$CellContext`s$$], 1600, 19600, ControlType -> Manipulator}}, 
+    Typeset`size$$ = {360., {110.165541074278, 115.897474668028}}, 
+    Typeset`update$$ = 0, Typeset`initDone$$, Typeset`skipInitDone$$ = True, 
+    Typeset`keyframeActionsQ$$ = False, Typeset`keyframeList$$ = {}}, 
+    DynamicBox[Manipulate`ManipulateBoxes[
+     1, StandardForm, "Variables" :> {$CellContext`s$$ = 1600}, 
+      "ControllerVariables" :> {}, 
+      "OtherVariables" :> {
+       Typeset`show$$, Typeset`bookmarkList$$, Typeset`bookmarkMode$$, 
+        Typeset`animator$$, Typeset`animvar$$, Typeset`name$$, 
+        Typeset`specs$$, Typeset`size$$, Typeset`update$$, Typeset`initDone$$,
+         Typeset`skipInitDone$$, Typeset`keyframeActionsQ$$, 
+        Typeset`keyframeList$$}, "Body" :> 
+      LogLogPlot[{$CellContext`x $CellContext`ymin $CellContext`s$$, \
+$CellContext`x $CellContext`ymax $CellContext`s$$, 1, 100}, {$CellContext`x, 
+         10^(-3), 0.1}, Filling -> {1 -> {2}}, PlotRange -> {0, 120}], 
+      "Specifications" :> {{$CellContext`s$$, 1600, 19600}}, "Options" :> {}, 
+      "DefaultOptions" :> {}],
+     ImageSizeCache->{409.1, {157.83596648931706`, 163.56790008306706`}},
+     SingleEvaluation->True],
+    Deinitialization:>None,
+    DynamicModuleValues:>{},
+    SynchronousInitialization->True,
+    UndoTrackedVariables:>{Typeset`show$$, Typeset`bookmarkMode$$},
+    UnsavedVariables:>{Typeset`initDone$$},
+    UntrackedVariables:>{Typeset`size$$}], "Manipulate",
+   Deployed->True,
+   StripOnInput->False],
+  Manipulate`InterpretManipulate[1]]], "Output",
+ CellChangeTimes->{
+  3.969696288446168*^9, {3.96969632979379*^9, 3.969696333445057*^9}, {
+   3.969696366472612*^9, 3.969696394395584*^9}, {3.96969644984619*^9, 
+   3.969696561475264*^9}},
+ CellLabel->
+  "Out[105]=",ExpressionUUID->"e5cd78f2-a1f6-49f0-b31e-c6fc7a8ac09f"]
+}, Open  ]]
+},
+WindowSize->{1038, 741},
+WindowMargins->{{60, Automatic}, {Automatic, 4}},
+FrontEndVersion->"14.2 for Mac OS X ARM (64-bit) (March 16, 2025)",
+StyleDefinitions->"Default.nb",
+ExpressionUUID->"31e996a2-9733-460e-94bb-5b8d91ca0535"
+]
+(* End of Notebook Content *)
+
+(* Internal cache information *)
+(*CellTagsOutline
+CellTagsIndex->{}
+*)
+(*CellTagsIndex
+CellTagsIndex->{}
+*)
+(*NotebookFileOutline
+Notebook[{
+Cell[CellGroupData[{
+Cell[576, 22, 1505, 39, 176, "Input",ExpressionUUID->"ac8a8f11-6dfb-4ada-b2d7-2276a25917b0"],
+Cell[2084, 63, 2125, 41, 357, "Output",ExpressionUUID->"e5cd78f2-a1f6-49f0-b31e-c6fc7a8ac09f"]
+}, Open  ]]
+}
+]
+*)
+
+(* End of internal cache information *)
+
